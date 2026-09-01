@@ -10,9 +10,8 @@ RetroArch. It boots straight from the XMB.
 
 TyrQuake is itself a conservative, actively maintained branch of the original
 Quake source code released by id Software in 1999. This project adds a full
-PS3 platform layer on top of it (video, audio, input, system integration) and
-patches a handful of bugs in TyrQuake's own shared engine code that surfaced
-along the way. In short:
+PS3 platform layer on top of it (video, audio, input, system integration)
+In short:
 
 ```
 Quake (id Software, 1996) -> TyrQuake (maintained fork) -> TyrQuakeCell (this project)
