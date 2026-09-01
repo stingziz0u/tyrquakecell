@@ -37,20 +37,11 @@ Quake (id Software, 1996) -> TyrQuake (maintained fork) -> TyrQuakeCell (this pr
   and quicksave/quickload), demo playback, both official mission packs
   (*Scourge of Armagon* and *Dissolution of Eternity*) as separate installs
   sharing one copy of the base game data.
-- **Real engine fixes**, not just plumbing -- several genuine bugs (some in
-  TyrQuake's own shared code, not just this platform layer) were found and
-  fixed along the way: a crash entering water/lava, shareware-era
-  restrictions silently blocking legally-owned loose files (music), a
-  background-music volume setting that never persisted, an engine-level
-  input freeze on the "start a new game?" confirmation dialog, and a couple
-  of double-confirmation bugs in the rebind menu.
 
 ## Requirements
 
-- A PS3 capable of running homebrew (HEN, CFW, or HFW -- any of the three
-  works; this project doesn't care which).
-- Your own legally-owned copy of Quake. `pak0.pak` (shareware or full) is
-  the minimum; `pak1.pak` unlocks the full game. **No game data is included
+- A PS3 capable of running homebrew (either HEN or CFW works fine)
+- Your own legally-owned copy of Quake. **No game data is included
   in this repository or in any release build** -- see
   [Installation](#installation).
 - To build from source: the [ps3dev / PSL1GHT](https://github.com/ps3dev)
@@ -90,13 +81,28 @@ Quake (id Software, 1996) -> TyrQuake (maintained fork) -> TyrQuakeCell (this pr
 
 ## Building from source
 
-```bash
-cd tyrquake-ps3
-make clean && make                       # base game -> TyrQuake.gnpdrm.pkg
-make clean && make MISSIONPACK=hipnotic  # -> TyrQuakeHipnotic.gnpdrm.pkg
-make clean && make MISSIONPACK=rogue     # -> TyrQuakeRogue.gnpdrm.pkg
-make clean && make DEBUG_BUILD=1         # -> TyrQuakeDebug.gnpdrm.pkg
-```
+1. Install the [ps3dev toolchain](https://github.com/ps3dev/ps3toolchain)
+   (third-party, not part of this project -- these are its own official
+   instructions):
+
+   ```bash
+   git clone https://github.com/ps3dev/ps3toolchain.git
+   cd ps3toolchain
+   export PS3DEV=/usr/local/ps3dev
+   export PSL1GHT=$PS3DEV
+   export PATH="$PATH:$PS3DEV/bin:$PS3DEV/ppu/bin:$PS3DEV/spu/bin"
+   ./toolchain.sh
+   ```
+2. Clone this repository and build:
+
+   ```bash
+   git clone https://github.com/<your-username>/TyrQuakeCell.git
+   cd TyrQuakeCell/tyrquake-ps3
+   make clean && make                       # base game -> TyrQuake.gnpdrm.pkg
+   make clean && make MISSIONPACK=hipnotic  # -> TyrQuakeHipnotic.gnpdrm.pkg
+   make clean && make MISSIONPACK=rogue     # -> TyrQuakeRogue.gnpdrm.pkg
+   make clean && make DEBUG_BUILD=1         # -> TyrQuakeDebug.gnpdrm.pkg
+   ```
 
 `make clean` between builds is required -- object files bake in different
 `CFLAGS` per variant and will silently go stale otherwise.
@@ -149,9 +155,10 @@ Options -> Customize Controls.
   (Tyrann) and contributors -- the engine this project is built on.
 - id Software, for releasing the original Quake source code under the GPL.
 - Reference PS3 homebrew projects whose code patterns this project directly
-  learned from: **dragonfly-quake-ps3** (RSX init/present sequence),
-  **GamePad Tester** (confirmed-working `ioPad` usage), and **xash3d-fwgs**'s
-  PS3 port (diagnosed and fixed the same hard-30fps double-buffering
+  learned from:
+  **dragonfly-quake-ps3** (RSX init/present sequence)
+  **GamePad Tester** (confirmed-working `ioPad` usage)
+  **xash3d-fwgs**'s PS3 port (diagnosed and fixed the same hard-30fps double-buffering
   quantization bug this project also hit).
 
 ## License
@@ -161,3 +168,9 @@ Quake source release. See [`tyrquake/gnu.txt`](tyrquake/gnu.txt).
 
 No Quake data files (`.pak`, music, or otherwise) are included in this
 repository. You need your own legally-owned copy of the game.
+
+## AI disclosure
+
+This project's code was written collaboratively with Claude (Anthropic),
+working through this port with me in real time over many sessions.
+Every bit of testing and debugging were made by me on real hardware.
