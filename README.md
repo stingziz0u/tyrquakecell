@@ -2,10 +2,6 @@
 
 A native homebrew port of [TyrQuake](https://github.com/RetroPie/tyrquake) for the PS3.
 
-"Native" matters here: this is a real homebrew executable built directly against
-PSL1GHT (RSX, `libaudio`, `libpad`, etc.), not a libretro core running inside
-RetroArch. It boots straight from the XMB.
-
 ## Lineage
 
 TyrQuake is itself a conservative, actively maintained branch of the original
