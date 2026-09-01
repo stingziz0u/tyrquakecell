@@ -96,7 +96,7 @@ Quake (id Software, 1996) -> TyrQuake (maintained fork) -> TyrQuakeCell (this pr
 2. Clone this repository and build:
 
    ```bash
-   git clone https://github.com/<your-username>/TyrQuakeCell.git
+   git clone https://github.com/<stingziz0u>/TyrQuakeCell.git
    cd TyrQuakeCell/tyrquake-ps3
    make clean && make                       # base game -> TyrQuake.gnpdrm.pkg
    make clean && make MISSIONPACK=hipnotic  # -> TyrQuakeHipnotic.gnpdrm.pkg
