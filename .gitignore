@@ -1,0 +1,20 @@
+# Build artifacts (all variants: base, Debug, Hipnotic, Rogue, and any
+# combination of the two) -- these patterns have no leading slash, so
+# they match at any depth (i.e. inside tyrquake-ps3/, where the Makefile
+# actually runs from).
+*.o
+*.elf
+*.self
+*.fake.self
+*.pkg
+*.gnpdrm.pkg
+tyrquake-ps3/build/
+
+# Game data -- never commit copyrighted Quake content.
+# End users supply their own pak0.pak / pak1.pak / music files.
+tyrquake-ps3/pkgfiles/USRDIR/id1/*.pak
+tyrquake-ps3/pkgfiles/USRDIR/id1/music/*.ogg
+tyrquake-ps3/pkgfiles/USRDIR/hipnotic/*.pak
+tyrquake-ps3/pkgfiles/USRDIR/hipnotic/music/*.ogg
+tyrquake-ps3/pkgfiles/USRDIR/rogue/*.pak
+tyrquake-ps3/pkgfiles/USRDIR/rogue/music/*.ogg
