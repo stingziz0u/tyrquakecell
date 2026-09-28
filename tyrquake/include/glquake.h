@@ -237,6 +237,9 @@ extern cvar_t r_drawviewmodel;
 extern cvar_t r_speeds;
 extern cvar_t r_waterwarp;
 extern cvar_t r_fullbright;
+#ifdef TYRQUAKE_PS3
+extern cvar_t r_shadows;
+#endif
 extern cvar_t r_lightmap;
 extern cvar_t r_mirroralpha;
 
@@ -445,6 +448,7 @@ typedef struct {
     const msurface_t *surf;
     float s;
     float t;
+    vec3_t spot;    /* where the trace hit the surface */
 } surf_lightpoint_t;
 
 qboolean R_LightSurfPoint(const vec3_t point, surf_lightpoint_t *lightpoint);

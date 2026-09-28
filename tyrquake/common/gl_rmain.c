@@ -93,6 +93,17 @@ cvar_t r_fullbright = {
     .string = "0",
     .flags = CVAR_DEVELOPER
 };
+#ifdef TYRQUAKE_PS3
+/*
+ * PS3 port: GLQuake's alias model shadows, which this TyrQuake had lost.
+ * The value is how dark they are: 1 is GLQuake's (half black), 0 off.
+ */
+cvar_t r_shadows = {
+    .name = "r_shadows",
+    .string = "0",
+    .flags = CVAR_CONFIG,
+};
+#endif
 cvar_t gl_keeptjunctions = {
     .name = "gl_keeptjunctions",
     .string = "1",
@@ -472,6 +483,10 @@ typedef struct {
     vec3_t shade;
     float ambient;
     float *shadedots;
+#ifdef TYRQUAKE_PS3
+    qboolean has_spot;
+    vec3_t spot;        /* the floor below the model, for its shadow */
+#endif
 } alias_light_t;
 
 /*
@@ -598,6 +613,12 @@ R_LightPoint(const vec3_t point, alias_light_t *light)
     }
 
     hit = R_LightSurfPoint(point, &lightpoint);
+#ifdef TYRQUAKE_PS3
+    if (hit) {
+        light->has_spot = true;
+        VectorCopy(lightpoint.spot, light->spot);
+    }
+#endif
     if (!hit) {
         light->shade[0] = light->ambient;
         light->shade[1] = light->ambient;
@@ -713,6 +734,101 @@ R_AliasCalcLight(const entity_t *entity, const vec3_t origin, const vec3_t angle
     VectorScale(light->shade, 1.0f / 200.0f, light->shade);
 }
 
+
+#ifdef TYRQUAKE_PS3
+/*
+ * PS3 port: r_shadows, as GLQuake's GL_DrawAliasShadow: the model's
+ * vertices squashed flat onto the floor below it (one unit above, to stay
+ * clear of it), leaning away from a fixed light direction, drawn in
+ * translucent black. The stencil lets each pixel be darkened only once,
+ * so where triangles or two shadows overlap they don't get darker (R_Clear
+ * clears it every frame while shadows are on).
+ */
+static qboolean
+R_AliasCastsShadow(const entity_t *entity)
+{
+    static const char *const noshadow[] = {
+        "progs/flame.mdl", "progs/flame2.mdl", "progs/bolt.mdl",
+        "progs/bolt2.mdl", "progs/bolt3.mdl", "progs/laser.mdl",
+        "progs/eyes.mdl",
+    };
+    int i;
+
+    if (entity == &cl.viewent)
+        return false;
+    if (ENTALPHA_DECODE(entity->alpha) < 1.0f)
+        return false;
+    for (i = 0; i < ARRAY_SIZE(noshadow); i++) {
+        if (!strcmp(entity->model->name, noshadow[i]))
+            return false;
+    }
+
+    return true;
+}
+
+static void
+R_AliasDrawShadow(const aliashdr_t *aliashdr, const lerpdata_t *lerpdata, const vec3_t spot,
+                  const float *verts, const uint16_t *indices)
+{
+    const int numverts = aliashdr->numverts;
+    const vec_t *scale = aliashdr->scale;
+    const vec_t *scale_origin = aliashdr->scale_origin;
+    const float lheight = lerpdata->origin[2] - spot[2];
+    const float height = -lheight + 1.0f;
+    const float yaw = lerpdata->angles[1] / 180.0f * M_PI;
+    float *points = alloca(numverts * 3 * sizeof(float));
+    float *point = points;
+    vec3_t shadevector;
+    int i;
+
+    /* Relative to the model's yaw: always the same direction in the world */
+    shadevector[0] = cosf(-yaw);
+    shadevector[1] = sinf(-yaw);
+    shadevector[2] = 1.0f;
+    VectorNormalize(shadevector);
+
+    for (i = 0; i < numverts; i++, verts += 6, point += 3) {
+        const float x = verts[0] * scale[0] + scale_origin[0];
+        const float y = verts[1] * scale[1] + scale_origin[1];
+        const float z = verts[2] * scale[2] + scale_origin[2];
+
+        point[0] = x - shadevector[0] * (z + lheight);
+        point[1] = y - shadevector[1] * (z + lheight);
+        point[2] = height;
+    }
+
+    /* Only the yaw: the shadow stays flat on the floor */
+    glPushMatrix();
+    glTranslatef(lerpdata->origin[0], lerpdata->origin[1], lerpdata->origin[2]);
+    glRotatef(lerpdata->angles[1], 0, 0, 1);
+
+    glDisable(GL_TEXTURE_2D);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glDepthMask(GL_FALSE);
+    glColor4f(0.0f, 0.0f, 0.0f, qclamp(r_shadows.value, 0.0f, 2.0f) * 0.5f);
+
+    glEnable(GL_STENCIL_TEST);
+    glStencilFunc(GL_EQUAL, 0, ~0u);
+    glStencilOp(GL_KEEP, GL_KEEP, GL_INCR);
+
+    glDisableClientState(GL_TEXTURE_COORD_ARRAY);
+    glEnableClientState(GL_VERTEX_ARRAY);
+    glVertexPointer(3, GL_FLOAT, 0, points);
+    qglDrawRangeElements(GL_TRIANGLES, 0, numverts - 1, aliashdr->numtris * 3, GL_UNSIGNED_SHORT, indices);
+    gl_draw_calls++;
+    gl_verts_submitted += numverts;
+    gl_indices_submitted += aliashdr->numtris * 3;
+
+    glDisable(GL_STENCIL_TEST);
+    glDepthMask(GL_TRUE);
+    glDisable(GL_BLEND);
+    glEnable(GL_TEXTURE_2D);
+    glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
+
+    glPopMatrix();
+}
+#endif
 
 /*
 =================
@@ -1050,6 +1166,13 @@ R_AliasDrawModel(entity_t *entity)
 	glHint(GL_PERSPECTIVE_CORRECTION_HINT, GL_NICEST);
 
     glPopMatrix();
+
+#ifdef TYRQUAKE_PS3
+    /* vertexbuf0 and indices are in memory without buffer objects (ps3gl) */
+    if (r_shadows.value > 0.0f && light.has_spot && !use_vp && !gl_buffer_objects_enabled
+        && R_AliasCastsShadow(entity))
+        R_AliasDrawShadow(aliashdr, &lerpdata, light.spot, vertexbuf0, indices);
+#endif
 
     /* Unbind the index buffer */
     if (gl_buffer_objects_enabled)
@@ -1731,7 +1854,15 @@ R_Clear
 static void
 R_Clear(void)
 {
+#ifdef TYRQUAKE_PS3
+    /* Shadows darken each pixel once (R_AliasDrawShadow) */
+    if (r_shadows.value > 0.0f)
+        glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+    else
+        glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT);
+#else
     glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT);
+#endif
 
     if (r_mirroralpha.value != 1.0) {
 	gldepthmin = 0;

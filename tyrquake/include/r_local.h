@@ -270,6 +270,7 @@ typedef struct {
     const msurface_t *surf;
     float s;
     float t;
+    vec3_t spot;    /* where the trace hit the surface */
 } surf_lightpoint_t;
 
 qboolean R_LightSurfPoint(const vec3_t point, surf_lightpoint_t *lightpoint);

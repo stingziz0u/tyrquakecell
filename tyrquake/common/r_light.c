@@ -168,6 +168,7 @@ R_FillLightPoint(const mnode_t *node, const vec3_t surfpoint, surf_lightpoint_t 
         lightpoint->surf = surf;
         lightpoint->s = s;
         lightpoint->t = t;
+        VectorCopy(surfpoint, lightpoint->spot);
 
         return true;
     }

@@ -236,4 +236,8 @@ VID_PS3_ResetSettings(void)
     Cvar_Set("vid_ps3_fps30", "0");
     Cvar_Set("vid_ps3_hudscale", "0");
     Cvar_Set("show_fps", "0");
+#ifdef GLQUAKE
+    Cvar_Set("gl_texturemode", "gl_nearest");
+    Cvar_Set("r_shadows", "0");
+#endif
 }

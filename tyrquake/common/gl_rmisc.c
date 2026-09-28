@@ -231,6 +231,9 @@ R_RegisterVariables()
 
     Cvar_RegisterVariable(&r_speeds);
     Cvar_RegisterVariable(&r_fullbright);
+#ifdef TYRQUAKE_PS3
+    Cvar_RegisterVariable(&r_shadows);
+#endif
     Cvar_RegisterVariable(&r_drawentities);
     Cvar_RegisterVariable(&r_drawviewmodel);
     Cvar_RegisterVariable(&r_drawflat);

@@ -363,6 +363,57 @@ GL_Texture_Anisotropy_f(cvar_t *cvar)
         GL_SetTextureMode(texture);
 }
 
+#ifdef TYRQUAKE_PS3
+static const glmode_t *
+GL_FindTextureMode(const char *name)
+{
+    int i;
+
+    for (i = 0; i < ARRAY_SIZE(gl_texturemodes); i++) {
+        if (!strcasecmp(gl_texturemodes[i].name, name))
+            return &gl_texturemodes[i];
+    }
+
+    return NULL;
+}
+
+/*
+ * PS3 port: gl_texturemode is a cvar here, not a command, so the Video
+ * Settings choice is saved in config.cfg. "gl_texturemode <name>" from
+ * the console or autoexec.cfg works the same as before.
+ */
+static void GL_TextureMode_Cvar_f(cvar_t *cvar);
+cvar_t gl_texturemode = {
+    .name = "gl_texturemode",
+    .string = "gl_nearest",
+    .flags = CVAR_CONFIG,
+    .callback = GL_TextureMode_Cvar_f,
+};
+
+static void
+GL_TextureMode_Cvar_f(cvar_t *cvar)
+{
+    const glmode_t *mode = GL_FindTextureMode(cvar->string);
+    gltexture_t *texture;
+
+    if (!mode) {
+        Con_Printf("bad filter name\n");
+        /* back to the one in use (a known name: no loop) */
+        Cvar_Set(cvar->name, gl_texturemode_current ? gl_texturemode_current->name : gl_texturemodes[0].name);
+        return;
+    }
+
+    /* Before GL_Textures_Init: it picks the mode up from the cvar */
+    if (!gl_texturemode_current)
+        return;
+
+    gl_texturemode_current = (glmode_t *)mode;
+
+    /* Change all the existing mipmap texture objects */
+    list_for_each_entry(texture, &manager.active, list)
+        GL_SetTextureMode(texture);
+}
+#else
 /*
 ===============
 Draw_TextureMode_f
@@ -410,6 +461,7 @@ GL_TextureMode_Arg_f(struct stree_root *root, int argnum)
             STree_InsertAlloc(root, gl_texturemodes[i].name, false);
     }
 }
+#endif /* TYRQUAKE_PS3 */
 
 static int
 GL_GetMaxMipLevel(qpic32_t *pic, GLint internal_format)
@@ -1021,13 +1073,18 @@ GL_Textures_RegisterVariables()
     Cvar_RegisterVariable(&gl_max_textures);
     Cvar_RegisterVariable(&gl_npot);
     Cvar_RegisterVariable(&gl_texture_anisotropy);
+#ifdef TYRQUAKE_PS3
+    Cvar_RegisterVariable(&gl_texturemode);
+#endif
 }
 
 void
 GL_Textures_AddCommands()
 {
+#ifndef TYRQUAKE_PS3
     Cmd_AddCommand("gl_texturemode", GL_TextureMode_f);
     Cmd_SetCompletion("gl_texturemode", GL_TextureMode_Arg_f);
+#endif
     Cmd_AddCommand("gl_printtextures", GL_PrintTextures_f);
     Cmd_SetCompletion("gl_printtextures", GL_PrintTextures_Arg_f);
 }
@@ -1037,7 +1094,13 @@ GL_Textures_Init(void)
 {
     GLint max_size;
 
+#ifdef TYRQUAKE_PS3
+    gl_texturemode_current = (glmode_t *)GL_FindTextureMode(gl_texturemode.string);
+    if (!gl_texturemode_current)
+        gl_texturemode_current = gl_texturemodes;
+#else
     gl_texturemode_current = gl_texturemodes;
+#endif
 
     // FIXME - could do better to check on each texture upload with
     //         GL_PROXY_TEXTURE_2D

@@ -172,18 +172,21 @@ PS3_SetDefaultBindings(void)
 	// are now quicksave/quickload.
 	{ PAD_KEY_L3,       "+moveup" },
 	{ PAD_KEY_R3,       "+movedown" },
+	// Scoreboard while held (1.4.0). Only in-game: in the menu SELECT
+	// is K_DEL instead (see IN_Commands).
+	{ PAD_KEY_SELECT,   "+showscores" },
     };
     for (int i = 0; i < sizeof(defaults) / sizeof(defaults[0]); i++) {
 	if (!keybindings[defaults[i].key])
 	    Key_SetBinding(defaults[i].key, defaults[i].cmd);
     }
 
-    // SQUARE and SELECT are deliberately left unbound by default in
-    // EVERY build, debug included -- noclip/god mode are available to
-    // bind from Customize Controls in a debug build (see menu.c), but
-    // never pre-bound automatically, so there's no scenario where a
-    // player launches a debug build fresh and finds cheats already
-    // active without asking for them. SELECT's in-menu role is
+    // SQUARE is deliberately left unbound by default in EVERY build,
+    // debug included -- noclip/god mode are available to bind from
+    // Customize Controls in a debug build (see menu.c), but never
+    // pre-bound automatically, so there's no scenario where a player
+    // launches a debug build fresh and finds cheats already active
+    // without asking for them. SELECT's in-menu role is
     // separate and unconditional either way -- a fixed, non-rebindable
     // "clear a binding in Customize Controls" (sent as K_DEL, not
     // through this table at all), same as START; see IN_Commands.
@@ -600,9 +603,9 @@ IN_Commands(void)
     //   Key_Event dispatches K_DEL exactly like a real keyboard press
     //   regardless of where it came from.
     // - In-game: goes through the normal bindable-key system like every
-    //   other face button, defaulting to noclip (handy for testing
-    //   things like L3/R3 without fighting through a level first), and
-    //   rebindable from Customize Controls like anything else.
+    //   other face button, defaulting to +showscores (the scoreboard
+    //   while held), and rebindable from Customize Controls like
+    //   anything else.
     if (key_dest == key_menu) {
 	if (pressed & BUTTON_SELECT)   Key_Event(K_DEL, true);
 	if (released & BUTTON_SELECT)  Key_Event(K_DEL, false);
@@ -612,13 +615,7 @@ IN_Commands(void)
 	    extern void PS3_Log(const char *fmt, ...);
 	    static int select_press_count = 0;
 	    select_press_count++;
-	    // Not a substitute for reading the actual "noclip ON/OFF"
-	    // console print -- just a count of presses, since SELECT's
-	    // in-game default is a toggle command (noclip), so parity
-	    // (odd/even count since boot) hints at the likely current
-	    // state without needing to track the real cvar/flag.
-	    PS3_Log("in_ps3: SELECT pressed in-game (press #%d, %s if still default noclip binding)",
-		    select_press_count, (select_press_count % 2) ? "now ON" : "now OFF");
+	    PS3_Log("in_ps3: SELECT pressed in-game (press #%d)", select_press_count);
 #endif
 	    Key_Event(PAD_KEY_SELECT, true);
 	}

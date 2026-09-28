@@ -15,10 +15,12 @@ Quake (id Software, 1996) -> TyrQuake (maintained fork) -> TyrQuakeCell (this pr
 
 ## Features
 
-- **Video**: 720p output, selectable internal render resolution (320x200 up
-  to 640x400 tested; 512x384 is the shipped default), hardware-accelerated
-  scaling via the RSX 2D transfer unit (not a CPU blit), triple-buffered
-  presentation, HUD/menu scaling that adapts to whatever resolution is set.
+- **Video**: TyrQuake's OpenGL renderer drawn by the RSX (stable 60fps, up
+  to 1280x720), or the original software renderer in the separate "SW"
+  packages. Everything is set from Options -> Video Settings: resolution,
+  HUD scale, brightness, gamma, TV screen fit, scaling, frame rate, FPS
+  display, and (OpenGL only) texture filtering (off / bilinear /
+  trilinear, `gl_texturemode`) and model shadows (`r_shadows`).
 - **Audio**: real hardware audio on its own dedicated thread, OGG background
   music (drop your own legally-owned soundtrack files in, see
   [Installation](#installation)).
@@ -93,14 +95,16 @@ Quake (id Software, 1996) -> TyrQuake (maintained fork) -> TyrQuakeCell (this pr
    ```bash
    git clone https://github.com/stingziz0u/TyrQuakeCell.git
    cd TyrQuakeCell/tyrquake-ps3
-   make clean && make                       # base game -> TyrQuake.gnpdrm.pkg
-   make clean && make MISSIONPACK=hipnotic  # -> TyrQuakeHipnotic.gnpdrm.pkg
-   make clean && make MISSIONPACK=rogue     # -> TyrQuakeRogue.gnpdrm.pkg
-   make clean && make DEBUG_BUILD=1         # -> TyrQuakeDebug.gnpdrm.pkg
+   make                                 # base game -> TyrQuake.gnpdrm.pkg
+   make MISSIONPACK=hipnotic            # -> TyrQuakeHipnotic.gnpdrm.pkg
+   make MISSIONPACK=rogue               # -> TyrQuakeRogue.gnpdrm.pkg
+   make RENDERER=soft                   # software renderer -> TyrQuakeSW.gnpdrm.pkg
+   make DEBUG_BUILD=1                   # -> TyrQuakeDebug.gnpdrm.pkg
    ```
 
-`make clean` between builds is required -- object files bake in different
-`CFLAGS` per variant and will silently go stale otherwise.
+Every variant builds in its own folder (`obj/<target>`), so no `make clean`
+is needed between them. Both renderers of a game install as the same game
+(same APPID) and share its data, `config.cfg` and saves.
 
 `DEBUG_BUILD=1` adds testing tools not present in the release build: noclip
 and god mode (bindable from Customize Controls, not bound by default), an
@@ -109,9 +113,6 @@ skips past the Chthon and Shub-Niggurath boss encounters rather than
 requiring them), and verbose diagnostic logging. `DEBUG_BUILD` can be
 combined with `MISSIONPACK` too.
 
-Internal render resolution is a compile-time constant (`BASEWIDTH` /
-`BASEHEIGHT` in `tyrquake-ps3/common/vid_ps3.c`) -- edit and rebuild if you
-want something other than the shipped 512x384.
 
 ## Controls
 
@@ -128,6 +129,7 @@ want something other than the shipped 512x384.
 | Confirm (menu) | Cross | |
 | Back / Cancel (menu) | Circle or Start | |
 | Open/close menu | Start | Fixed, not rebindable |
+| Scoreboard | Select | While held (`+showscores`) |
 | Clear a binding | Select | While inside Customize Controls only |
 
 Everything above except Start and Select's menu role is rebindable from
@@ -139,10 +141,6 @@ Options -> Customize Controls.
   some are read correctly, some report as connected but never produce any
   key data. This traces back to the PS3's own low-level `ioKb` driver, not
   something fixable from application code.
-- The in-game "Video Options" menu was removed rather than wired up --
-  internal render resolution is a build-time choice (see
-  [Building from source](#building-from-source)) rather than a runtime
-  menu option.
 
 ## Credits
 

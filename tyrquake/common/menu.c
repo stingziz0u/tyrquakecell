@@ -909,6 +909,10 @@ typedef enum {
     M_VIDEO_CURSOR_GAMMA,
     M_VIDEO_CURSOR_SCREENFIT,
     M_VIDEO_CURSOR_SCALING,
+#ifdef GLQUAKE
+    M_VIDEO_CURSOR_TEXTUREFILTER,   /* gl_texturemode (1.4.0) */
+    M_VIDEO_CURSOR_SHADOWS,         /* r_shadows (1.4.0) */
+#endif
     M_VIDEO_CURSOR_FRAMERATE,
     M_VIDEO_CURSOR_FPS,
     M_VIDEO_CURSOR_RESET,
@@ -916,6 +920,35 @@ typedef enum {
 } m_video_cursor_t;
 
 static m_video_cursor_t m_video_cursor;
+
+#ifdef GLQUAKE
+/* The texture filters Video Settings cycles through (gl_texturemode) */
+static const struct {
+    const char *mode;
+    const char *label;
+} m_video_texturefilters[] = {
+    { "gl_nearest",               "off" },
+    { "gl_linear_mipmap_nearest", "bilinear" },
+    { "gl_linear_mipmap_linear",  "trilinear" },
+};
+#define M_VIDEO_NUM_TEXTUREFILTERS \
+    ((int)(sizeof(m_video_texturefilters) / sizeof(m_video_texturefilters[0])))
+
+/* Index of the current gl_texturemode, -1 if set to another one */
+static int
+M_Video_TextureFilter(void)
+{
+    const char *mode = Cvar_VariableString("gl_texturemode");
+    int i;
+
+    for (i = 0; i < M_VIDEO_NUM_TEXTUREFILTERS; i++) {
+        if (!strcasecmp(m_video_texturefilters[i].mode, mode))
+            return i;
+    }
+
+    return -1;
+}
+#endif
 
 static void
 M_Menu_Video_f(void)
@@ -964,6 +997,15 @@ M_Video_Draw(void)
 
     M_Print(16, height += 8, "               Scaling");
     M_Print(220, height, vid_ps3_filter.value ? "smooth" : "sharp");
+
+#ifdef GLQUAKE
+    mode = M_Video_TextureFilter();
+    M_Print(16, height += 8, "        Texture Filter");
+    M_Print(220, height, mode >= 0 ? m_video_texturefilters[mode].label : "custom");
+
+    M_Print(16, height += 8, "               Shadows");
+    M_DrawCheckbox(220, height, Cvar_VariableValue("r_shadows") > 0.0f);
+#endif
 
     M_Print(16, height += 8, "            Frame Rate");
     M_Print(220, height, vid_ps3_fps30.value ? "locked 30" : "up to 60");
@@ -1019,6 +1061,17 @@ M_Video_Adjust(int dir)
     case M_VIDEO_CURSOR_SCALING:
 	Cvar_SetValue("vid_ps3_filter", !vid_ps3_filter.value);
 	break;
+#ifdef GLQUAKE
+    case M_VIDEO_CURSOR_TEXTUREFILTER:
+	/* from a mode set in the console: back to the first one */
+	mode = M_Video_TextureFilter();
+	mode = (mode < 0) ? 0 : (mode + dir + M_VIDEO_NUM_TEXTUREFILTERS) % M_VIDEO_NUM_TEXTUREFILTERS;
+	Cvar_Set("gl_texturemode", m_video_texturefilters[mode].mode);
+	break;
+    case M_VIDEO_CURSOR_SHADOWS:
+	Cvar_SetValue("r_shadows", Cvar_VariableValue("r_shadows") > 0.0f ? 0 : 1);
+	break;
+#endif
     case M_VIDEO_CURSOR_FRAMERATE:
 	Cvar_SetValue("vid_ps3_fps30", !vid_ps3_fps30.value);
 	break;
