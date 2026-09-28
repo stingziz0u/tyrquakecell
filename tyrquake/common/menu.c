@@ -31,6 +31,10 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #include "vid.h"
 #include "view.h"
 
+#ifdef TYRQUAKE_PS3
+#include "vid_ps3_common.h"
+#endif
+
 #ifdef NQ_HACK
 #include "host.h"
 #include "net.h"
@@ -378,16 +382,25 @@ M_Main_Key(knum_t keynum)
 
 typedef enum {
     M_OPTIONS_CURSOR_CONTROLS,
+#ifdef TYRQUAKE_PS3
+    M_OPTIONS_CURSOR_VIDEO,     /* PS3: Video Settings, Brightness moved there */
+#endif
     M_OPTIONS_CURSOR_CONSOLE,
     M_OPTIONS_CURSOR_RESETDEFAULTS,
     M_OPTIONS_CURSOR_SCREENSIZE,
+#ifdef TYRQUAKE_PS3
+    M_OPTIONS_CURSOR_CROSSHAIR,     /* PS3: crosshair style and color */
+    M_OPTIONS_CURSOR_CROSSHAIRCOLOR,
+#else
     M_OPTIONS_CURSOR_BRIGHTNESS,
+#endif
     M_OPTIONS_CURSOR_MOUSESPEED,
     M_OPTIONS_CURSOR_JOYSTICKSPEED,
     M_OPTIONS_CURSOR_MUSICVOLUME,
     M_OPTIONS_CURSOR_SOUNDVOLUME,
     M_OPTIONS_CURSOR_ALWAYSRUN,
     M_OPTIONS_CURSOR_MOUSEINVERT,
+    M_OPTIONS_CURSOR_JOYINVERT,
     M_OPTIONS_CURSOR_MOUSELOOK,
     M_OPTIONS_CURSOR_LOOKSPRING,
     M_OPTIONS_CURSOR_LOOKSTRAFE,
@@ -400,6 +413,12 @@ typedef enum {
 } m_options_cursor_t;
 
 #define	SLIDER_RANGE	10
+
+#ifdef TYRQUAKE_PS3
+/* Palette indexes the crosshair color cycles through (79 is Quake's
+   default); the menu shows each as a swatch. */
+static const int m_crosshair_colors[] = { 79, 15, 251, 254, 192, 208, 244, 184, 44 };
+#endif
 
 static m_options_cursor_t m_options_cursor;
 
@@ -422,11 +441,30 @@ M_AdjustSliders(int dir)
 	scr_viewsize.value = qclamp(scr_viewsize.value, 30.0f, 120.0f);
 	Cvar_SetValue("viewsize", scr_viewsize.value);
 	break;
+#ifdef TYRQUAKE_PS3
+    case M_OPTIONS_CURSOR_CROSSHAIR:
+	/* off / on: a "+" in the chosen color (draw.c, gl_draw.c) */
+	Cvar_SetValue("crosshair", crosshair.value ? 0 : 1);
+	break;
+    case M_OPTIONS_CURSOR_CROSSHAIRCOLOR: {
+	int i, n = (int)(sizeof(m_crosshair_colors) / sizeof(m_crosshair_colors[0]));
+
+	for (i = 0; i < n; i++) {
+	    if (m_crosshair_colors[i] == (int)crosshaircolor.value)
+		break;
+	}
+	i = (i >= n) ? 0 : (i + dir + n) % n;
+	Cvar_SetValue("crosshaircolor", m_crosshair_colors[i]);
+	break;
+    }
+#endif
+#ifndef TYRQUAKE_PS3
     case M_OPTIONS_CURSOR_BRIGHTNESS:
 	v_gamma.value -= dir * 0.05;
 	v_gamma.value = qclamp(v_gamma.value, 0.5f, 1.0f);
 	Cvar_SetValue("gamma", v_gamma.value);
 	break;
+#endif
     case M_OPTIONS_CURSOR_MOUSESPEED:
 	sensitivity.value += dir * 0.5;
 	sensitivity.value = qclamp(sensitivity.value, 1.0f, 11.0f);
@@ -452,6 +490,9 @@ M_AdjustSliders(int dir)
 	break;
     case M_OPTIONS_CURSOR_MOUSEINVERT:
 	Cvar_SetValue("m_pitch", -m_pitch.value);
+	break;
+    case M_OPTIONS_CURSOR_JOYINVERT:
+	Cvar_SetValue("joy_invertlook", joy_invertlook.value ? 0 : 1);
 	break;
     case M_OPTIONS_CURSOR_MOUSELOOK:
 	Cvar_SetValue("m_freelook", !m_freelook.value);
@@ -512,6 +553,9 @@ M_Options_Draw(void)
     M_DrawTransPic((320 - pic->width) / 2, 4, pic);
 
     M_Print(16, height = 32, "    Customize controls");
+#ifdef TYRQUAKE_PS3
+    M_Print(16, height += 8, "        Video Settings");
+#endif
     M_Print(16, height += 8, "         Go to console");
     M_Print(16, height += 8, "     Reset to defaults");
 
@@ -519,9 +563,17 @@ M_Options_Draw(void)
     M_Print(16, height += 8, "           Screen size");
     M_DrawSlider(220, height, slider);
 
+#ifdef TYRQUAKE_PS3
+    M_Print(16, height += 8, "             Crosshair");
+    M_DrawCheckbox(220, height, crosshair.value);
+
+    M_Print(16, height += 8, "       Crosshair Color");
+    Draw_Fill(220 + ((scr_scaled_width - 320) >> 1), height, 24, 8, (byte)crosshaircolor.value);
+#else
     slider = (1.0 - v_gamma.value) / 0.5;
     M_Print(16, height += 8, "            Brightness");
     M_DrawSlider(220, height, slider);
+#endif
 
     slider = (sensitivity.value - 1) / 10;
     M_Print(16, height += 8, "           Mouse Speed");
@@ -544,6 +596,9 @@ M_Options_Draw(void)
 
     M_Print(16, height += 8, "          Invert Mouse");
     M_DrawCheckbox(220, height, m_pitch.value < 0);
+
+    M_Print(16, height += 8, "       Invert Joystick");
+    M_DrawCheckbox(220, height, joy_invertlook.value != 0);
 
     M_Print(16, height += 8, "            Mouse Look");
     M_DrawCheckbox(220, height, m_freelook.value);
@@ -582,6 +637,11 @@ M_Options_Key(knum_t keynum)
 	case M_OPTIONS_CURSOR_CONTROLS:
 	    M_Menu_Keys_f();
 	    break;
+#ifdef TYRQUAKE_PS3
+	case M_OPTIONS_CURSOR_VIDEO:
+	    M_Menu_Video_f();
+	    break;
+#endif
 	case M_OPTIONS_CURSOR_CONSOLE:
 	    m_state = m_none;
 	    Con_ToggleConsole_f();
@@ -835,6 +895,184 @@ M_Keys_Key(knum_t keynum)
 //=============================================================================
 /* VIDEO MENU */
 
+#ifdef TYRQUAKE_PS3
+/*
+ * PS3 port: Video Settings (Options > Video Settings), instead of the
+ * desktop video modes menu. The values live in vid_ps3_common.c's cvars
+ * and are applied every frame; a new resolution is switched to at the end
+ * of the frame.
+ */
+typedef enum {
+    M_VIDEO_CURSOR_RESOLUTION,
+    M_VIDEO_CURSOR_HUDSCALE,
+    M_VIDEO_CURSOR_BRIGHTNESS,
+    M_VIDEO_CURSOR_GAMMA,
+    M_VIDEO_CURSOR_SCREENFIT,
+    M_VIDEO_CURSOR_SCALING,
+    M_VIDEO_CURSOR_FRAMERATE,
+    M_VIDEO_CURSOR_FPS,
+    M_VIDEO_CURSOR_RESET,
+    M_VIDEO_CURSOR_LINES,
+} m_video_cursor_t;
+
+static m_video_cursor_t m_video_cursor;
+
+static void
+M_Menu_Video_f(void)
+{
+    key_dest = key_menu;
+    m_state = m_video;
+    m_entersound = true;
+}
+
+static void
+M_Video_Draw(void)
+{
+    const qpic8_t *pic;
+    char buf[32];
+    int height, mode;
+    float slider;
+
+    M_DrawTransPic(16, 4, Draw_CachePic("gfx/qplaque.lmp"));
+    pic = Draw_CachePic("gfx/p_option.lmp");
+    M_DrawTransPic((320 - pic->width) / 2, 4, pic);
+
+    mode = VID_PS3_CurrentMode();
+    qsnprintf(buf, sizeof(buf), "%dx%d", VID_PS3_ModeWidth(mode), VID_PS3_ModeHeight(mode));
+    M_Print(16, height = 32, "            Resolution");
+    M_Print(220, height, buf);
+
+    if (vid_ps3_hudscale.value > 0.0f)
+        qsnprintf(buf, sizeof(buf), "%.1fx", vid_ps3_hudscale.value);
+    else
+        qsnprintf(buf, sizeof(buf), "auto");
+    M_Print(16, height += 8, "             HUD Scale");
+    M_Print(220, height, buf);
+
+    slider = (vid_ps3_brightness.value - 0.5f) / (2.0f - 0.5f);
+    M_Print(16, height += 8, "            Brightness");
+    M_DrawSlider(220, height, slider);
+
+    /* Quake's gamma: lower is brighter, as the old Options slider */
+    slider = (1.0f - v_gamma.value) / 0.5f;
+    M_Print(16, height += 8, "                 Gamma");
+    M_DrawSlider(220, height, slider);
+
+    slider = (vid_ps3_screenfit.value - 70.0f) / (100.0f - 70.0f);
+    M_Print(16, height += 8, "         TV Screen Fit");
+    M_DrawSlider(220, height, slider);
+
+    M_Print(16, height += 8, "               Scaling");
+    M_Print(220, height, vid_ps3_filter.value ? "smooth" : "sharp");
+
+    M_Print(16, height += 8, "            Frame Rate");
+    M_Print(220, height, vid_ps3_fps30.value ? "locked 30" : "up to 60");
+
+    M_Print(16, height += 8, "           FPS Display");
+    switch ((int)Cvar_VariableValue("show_fps")) {
+    case 0:  M_Print(220, height, "off"); break;
+    case 1:  M_Print(220, height, "top left"); break;
+    default: M_Print(220, height, "top right"); break;
+    }
+
+    M_Print(16, height += 8, "     Reset to defaults");
+
+    M_DrawCursor(200, 32 + m_video_cursor * 8, 12);
+}
+
+static void
+M_Video_Adjust(int dir)
+{
+    int mode, count;
+    float value;
+
+    S_LocalSound("misc/menu3.wav");
+
+    switch (m_video_cursor) {
+    case M_VIDEO_CURSOR_RESOLUTION:
+	count = VID_PS3_NumModes();
+	mode = (VID_PS3_CurrentMode() + dir + count) % count;
+	VID_PS3_SelectMode(mode);
+	break;
+    case M_VIDEO_CURSOR_HUDSCALE:
+	/* auto, 1.0, 1.5 ... 4.0 (never more than fits: vid_ps3_common.c) */
+	value = vid_ps3_hudscale.value > 0.0f ? vid_ps3_hudscale.value : 0.5f;
+	value += dir * 0.5f;
+	if (value > 4.0f)
+	    value = 0.0f;
+	else if (value < 0.75f)
+	    value = (dir < 0 && vid_ps3_hudscale.value <= 0.0f) ? 4.0f : 0.0f;
+	Cvar_SetValue("vid_ps3_hudscale", value);
+	break;
+    case M_VIDEO_CURSOR_BRIGHTNESS:
+	value = qclamp(vid_ps3_brightness.value + dir * 0.1f, 0.5f, 2.0f);
+	Cvar_SetValue("vid_ps3_brightness", (int)(value * 10.0f + 0.5f) / 10.0f);
+	break;
+    case M_VIDEO_CURSOR_GAMMA:
+	value = qclamp(v_gamma.value - dir * 0.05f, 0.5f, 1.0f);
+	Cvar_SetValue("gamma", (int)(value * 20.0f + 0.5f) / 20.0f);
+	break;
+    case M_VIDEO_CURSOR_SCREENFIT:
+	value = qclamp(vid_ps3_screenfit.value + dir * 2.0f, 70.0f, 100.0f);
+	Cvar_SetValue("vid_ps3_screenfit", (int)value);
+	break;
+    case M_VIDEO_CURSOR_SCALING:
+	Cvar_SetValue("vid_ps3_filter", !vid_ps3_filter.value);
+	break;
+    case M_VIDEO_CURSOR_FRAMERATE:
+	Cvar_SetValue("vid_ps3_fps30", !vid_ps3_fps30.value);
+	break;
+    case M_VIDEO_CURSOR_FPS:
+	Cvar_SetValue("show_fps", ((int)Cvar_VariableValue("show_fps") + dir + 3) % 3);
+	break;
+    default:
+	break;
+    }
+}
+
+static void
+M_Video_Key(knum_t keynum)
+{
+    switch (keynum) {
+    case K_ESCAPE:
+	M_Menu_Options_f();
+	break;
+
+    case K_ENTER:
+	m_entersound = true;
+	if (m_video_cursor == M_VIDEO_CURSOR_RESET)
+	    VID_PS3_ResetSettings();
+	else
+	    M_Video_Adjust(1);
+	break;
+
+    case K_UPARROW:
+	S_LocalSound("misc/menu1.wav");
+	if (m_video_cursor-- == 0)
+	    m_video_cursor = M_VIDEO_CURSOR_LINES - 1;
+	break;
+
+    case K_DOWNARROW:
+	S_LocalSound("misc/menu1.wav");
+	m_video_cursor++;
+	m_video_cursor %= M_VIDEO_CURSOR_LINES;
+	break;
+
+    case K_LEFTARROW:
+	if (m_video_cursor != M_VIDEO_CURSOR_RESET)
+	    M_Video_Adjust(-1);
+	break;
+
+    case K_RIGHTARROW:
+	if (m_video_cursor != M_VIDEO_CURSOR_RESET)
+	    M_Video_Adjust(1);
+	break;
+
+    default:
+	break;
+    }
+}
+#else
 static void
 M_Menu_Video_f(void)
 {
@@ -855,6 +1093,7 @@ M_Video_Key(knum_t keynum)
 {
     (*vid_menukeyfn)(keynum);
 }
+#endif
 
 //=============================================================================
 /* QUIT MENU */

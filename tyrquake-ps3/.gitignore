@@ -13,3 +13,5 @@ pkgfiles/USRDIR/id1/*.pak
 pkgfiles/USRDIR/id1/music/*.ogg
 pkgfiles/USRDIR/hipnotic/*.pak
 pkgfiles/USRDIR/rogue/*.pak
+obj/
+*.orig

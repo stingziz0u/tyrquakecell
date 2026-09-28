@@ -123,7 +123,7 @@ Sys_MakeCodeUnwriteable(void *start_addr, void *end_addr)
  * and flushes on every call (deliberately not buffered/kept open) so that
  * if the game crashes hard right after a call, the line we just wrote is
  * still on disk -- that's the whole point of this function existing. */
-#define PS3_LOG_PATH "/dev_hdd0/game/TYRQ00001/USRDIR/tyrquake_log.txt"
+#define PS3_LOG_PATH "/dev_hdd0/game/TYRFRESH1/USRDIR/tyrquake_log.txt"
 
 void
 PS3_Log(const char *fmt, ...)
@@ -179,6 +179,22 @@ Sys_Error(const char *error, ...)
      * consider flashing an error color to screen too, since printf output
      * alone is invisible on a real console with no debug TTY attached. */
 
+    /* Let go of the audio port and the RSX before exit(): leaving with the
+     * RSX's flip/vblank handlers still pointing into this process takes
+     * the whole console down. Not Host_Shutdown(): that would also write
+     * config.cfg, maybe half initialized. Only once, in case one of these
+     * is what failed. */
+    {
+	static int in_error;
+	extern void SNDDMA_Shutdown(void);
+	extern void VID_Shutdown(void);
+
+	if (!in_error++) {
+	    SNDDMA_Shutdown();
+	    VID_Shutdown();
+	}
+    }
+
     exit(1);
 }
 
@@ -195,6 +211,13 @@ Sys_Printf(const char *fmt, ...)
 void
 Sys_Quit(void)
 {
+    /* "Quit" from the menu (Host_Quit_f) ends here. Like the XMB's "Quit
+     * Game" (PS3_SysutilCallback below): Host_Shutdown() writes
+     * config.cfg and lets go of the audio and the RSX (VID_Shutdown)
+     * before exit(). A bare exit() left the RSX's vblank handler pointing
+     * into a dead process and crashed the whole console. */
+    PS3_Log("Sys_Quit: shutting down");
+    Host_Shutdown();
     exit(0);
 }
 

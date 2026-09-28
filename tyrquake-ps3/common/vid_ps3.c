@@ -284,19 +284,24 @@ PS3_RSX_Shutdown(void)
 static void
 PS3_RSX_Present(const u32 *src, int src_w, int src_h)
 {
-    extern double Sys_DoubleTime(void);
     static int frame_count = 0;
+    qboolean verbose = (frame_count < 8); // full step-by-step detail for the first 8 frames
+#ifdef TYRQUAKE_DEBUG_BUILD
+    extern double Sys_DoubleTime(void);
     static double fps_window_start = -1.0;
     static int fps_window_frames = 0;
-    qboolean verbose = (frame_count < 8); // full step-by-step detail for the first 8 frames
+#endif
     if (!rsx_ready)
 	return;
 
+#ifdef TYRQUAKE_DEBUG_BUILD
     // Measure real FPS over a continuous 1-second window, logged every
-    // second for the whole session -- for a dedicated performance-
-    // testing playthrough like this one, per-second granularity across
-    // a full level matters more than avoiding the disk-activity icon
-    // (which this will likely bring back for the duration of this test).
+    // second for the whole session -- left over from a dedicated
+    // performance-testing playthrough, where per-second granularity across
+    // a full level mattered more than avoiding the disk-activity icon.
+    // Debug-only: on a release build this ran for the whole session and
+    // wrote to disk once a second forever, which is exactly the kind of
+    // leftover log a clean release shouldn't ship with.
     double now = Sys_DoubleTime();
     if (fps_window_start < 0) fps_window_start = now;
     fps_window_frames++;
@@ -307,7 +312,6 @@ PS3_RSX_Present(const u32 *src, int src_w, int src_h)
 	fps_window_start = now;
 	fps_window_frames = 0;
 
-#ifdef TYRQUAKE_DEBUG_BUILD
 	// Same 1-second cadence, same log file -- Quake's own built-in
 	// r_speeds/r_dspeeds render-stage timing (see r_misc.c's
 	// R_PrintTimes/R_PrintDSpeeds, which this mirrors -- reading the
@@ -325,15 +329,18 @@ PS3_RSX_Present(const u32 *src, int src_w, int src_h)
 		(se_time2 - se_time1) * 1000, (de_time2 - de_time1) * 1000,
 		(dv_time2 - dv_time1) * 1000, (dp_time2 - dp_time1) * 1000,
 		r_cache_thrash);
-#endif
     }
 
     // Cheap, always-on heartbeat -- but infrequent, since every write to
     // the log file touches disk, and the PS3 flashes a system activity
     // icon on frequent disk access (this was showing up as an unwanted
-    // "RAM" icon flickering onscreen when this ran twice a second).
+    // "RAM" icon flickering onscreen when this ran twice a second). Also
+    // debug-only now -- same reasoning as the fps window above: a release
+    // build shouldn't be writing to disk once a minute for the whole
+    // session either.
     if (frame_count % 1800 == 0) // roughly once a minute at 30fps
 	PS3_Log("PS3_RSX_Present: still running, frame %d", frame_count);
+#endif
 
     if (verbose) PS3_Log("PS3_RSX_Present: frame %d starting", frame_count);
 

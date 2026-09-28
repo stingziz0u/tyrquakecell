@@ -388,7 +388,12 @@ R_SetVrect(const vrect_t *in, vrect_t *out, int lineadj)
         lineadj = SCR_Scale(lineadj);
     }
 
+#ifdef TYRQUAKE_PS3
+    /* PS3 port: full height only without a status bar (see screen.c) */
+    full = (scr_viewsize.value >= 120.0f);
+#else
     full = (scr_viewsize.value >= 100.0f);
+#endif
     size = qmin(scr_viewsize.value + 10.0f, 100.0f);  // 90 is full width but sbar height filled
 
     /* Hide the status bar during intermission */

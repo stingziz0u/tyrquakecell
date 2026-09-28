@@ -33,6 +33,9 @@ static float old_mouse_dx, old_mouse_dy; // for m_filter smoothing
 // PS3_TURN_SPEED/PS3_PITCH_SPEED unchanged; adjustable from the Options
 // menu ("Joystick Sensitivity" -- see menu.c).
 cvar_t joy_sensitivity = { "joy_sensitivity", "1.0", CVAR_CONFIG };
+/* Invierte el eje Y del stick derecho (mirar). 0 = normal, 1 = invertido.
+   Pedido en el issue de GitHub; se guarda en la config como el resto. */
+cvar_t joy_invertlook = { "joy_invertlook", "0", CVAR_CONFIG };
 
 // io/pad.h already defines MAX_PADS (127) -- no need to redefine it
 // ourselves (that was causing a harmless but noisy redefinition warning).
@@ -778,6 +781,13 @@ IN_Move(usercmd_t *cmd)
 {
     qboolean did_look = false;
 
+    // Only while actually playing. The client builds a move every frame
+    // even with the menu or console up (single player: the game itself is
+    // stopped then) or the game paused, and the sticks used to turn the
+    // camera anyway.
+    if (key_dest != key_game || cl.paused)
+	return;
+
     if (pad_available) {
 	// Left stick: move forward/back and strafe.
 	float lx = PS3_StickAxis(pad_data.button[6]);
@@ -802,7 +812,10 @@ IN_Move(usercmd_t *cmd)
 	float ry = PS3_StickAxis(pad_data.button[5]);
 	if (rx != 0.0f || ry != 0.0f) {
 	    cl.viewangles[YAW] -= rx * PS3_TURN_SPEED * joy_sensitivity.value * host_frametime;
-	    cl.viewangles[PITCH] += ry * PS3_PITCH_SPEED * joy_sensitivity.value * host_frametime;
+	    if (joy_invertlook.value)
+		cl.viewangles[PITCH] -= ry * PS3_PITCH_SPEED * joy_sensitivity.value * host_frametime;
+	    else
+		cl.viewangles[PITCH] += ry * PS3_PITCH_SPEED * joy_sensitivity.value * host_frametime;
 	    did_look = true;
 	}
     }
@@ -875,4 +888,5 @@ IN_RegisterVariables(void)
     Cvar_RegisterVariable(&_windowed_mouse);
     Cvar_RegisterVariable(&m_filter);
     Cvar_RegisterVariable(&joy_sensitivity);
+    Cvar_RegisterVariable(&joy_invertlook);
 }

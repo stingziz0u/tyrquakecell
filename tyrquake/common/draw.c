@@ -278,6 +278,48 @@ Draw_Pixel(int x, int y, byte color)
     }
 }
 
+#ifdef TYRQUAKE_PS3
+/*
+ * PS3 port: one crosshair, a "+" centered on the view, as thick as the
+ * HUD scale makes the font's lines, in crosshaircolor (Options >
+ * Crosshair / Crosshair Color). The OpenGL version is in gl_draw.c.
+ */
+static void
+Draw_PS3_Bar(int x0, int y0, int w, int h, byte c)
+{
+    int x, y;
+
+    for (y = y0; y < y0 + h; y++) {
+        if (y < 0 || y >= vid.height)
+            continue;
+        for (x = x0; x < x0 + w; x++) {
+            if (x < 0 || x >= vid.width)
+                continue;
+            vid.conbuffer[y * vid.conrowbytes + x] = c;
+        }
+    }
+}
+
+void
+Draw_Crosshair(void)
+{
+    const byte c = (byte)crosshaircolor.value;
+    int arm = (int)(3.0f * scr_scale + 0.5f);
+    int t = (int)(scr_scale * 0.6f + 0.5f);
+    int cx, cy;
+
+    if (!crosshair.value || r_pixbytes != 1)
+        return;
+    if (t < 1)
+        t = 1;
+
+    cx = scr_vrect.x + scr_vrect.width / 2 + (int)cl_crossx.value;
+    cy = scr_vrect.y + scr_vrect.height / 2 + (int)cl_crossy.value;
+
+    Draw_PS3_Bar(cx - arm, cy - t / 2, 2 * arm + (t & 1), t, c);   /* horizontal */
+    Draw_PS3_Bar(cx - t / 2, cy - arm, t, 2 * arm + (t & 1), c);   /* vertical */
+}
+#else
 void
 Draw_Crosshair(void)
 {
@@ -314,6 +356,7 @@ Draw_Crosshair(void)
 	Draw_Character(x, y, '+');
     }
 }
+#endif /* TYRQUAKE_PS3 */
 
 static void
 Draw_ScaledPic(int x, int y, const qpic8_t *pic)

@@ -43,6 +43,7 @@ extern cvar_t _windowed_mouse;
 // support), but declaring it unconditionally here (rather than behind
 // an #ifdef) is harmless and keeps this header simpler.
 extern cvar_t joy_sensitivity;
+extern cvar_t joy_invertlook;
 
 void IN_AddCommands();
 void IN_RegisterVariables();

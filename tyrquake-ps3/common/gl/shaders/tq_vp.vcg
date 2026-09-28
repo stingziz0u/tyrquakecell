@@ -1,0 +1,31 @@
+/*
+ * tq_vp.vcg -- the vertex program of ps3gl (TyrQuakeCell).
+ *
+ * Quake2PS3's q2_vp.vcg, itself IoQuake3-PS3's q3_vp.vcg without the clip
+ * plane (the binary proven on hardware).
+ *
+ *   ATTR0  position (float4)      -> mvp * position
+ *   ATTR3  color    (4 x u8, 0-1) -> COLOR0
+ *   ATTR8  texcoord 0             -> TEXCOORD0
+ *   ATTR9  texcoord 1             -> TEXCOORD1
+ */
+
+void main(
+    float4 position : ATTR0,
+    float4 color    : ATTR3,
+    float2 tc0      : ATTR8,
+    float2 tc1      : ATTR9,
+
+    uniform float4x4 mvp,
+
+    out float4 oPosition : POSITION,
+    out float4 oColor    : COLOR0,
+    out float2 oTc0      : TEXCOORD0,
+    out float2 oTc1      : TEXCOORD1
+)
+{
+    oPosition = mul(mvp, position);
+    oColor    = color;
+    oTc0      = tc0;
+    oTc1      = tc1;
+}

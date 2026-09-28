@@ -615,6 +615,51 @@ Draw_Alt_String(int x, int y, const char *str)
     Draw_Alt_StringAlpha(x, y, str, 1.0f);
 }
 
+#ifdef TYRQUAKE_PS3
+/*
+ * PS3 port: one crosshair, a "+" centered on the view, as thick as the
+ * HUD scale makes the font's lines, in crosshaircolor (Options >
+ * Crosshair / Crosshair Color). Drawn in real pixels (GL_Set2D's
+ * projection is the whole render target), so it's exactly centered.
+ */
+void
+Draw_Crosshair(void)
+{
+    const byte c = (byte)crosshaircolor.value;
+    float arm = floorf(3.0f * scr_scale + 0.5f);
+    float t = floorf(scr_scale * 0.6f + 0.5f);
+    float cx, cy, h;
+
+    if (!crosshair.value)
+        return;
+    if (t < 1.0f)
+        t = 1.0f;
+
+    cx = scr_vrect.x + scr_vrect.width / 2 + (int)cl_crossx.value;
+    cy = scr_vrect.y + scr_vrect.height / 2 + (int)cl_crossy.value;
+    h = floorf(t / 2.0f);
+
+    glDisable(GL_TEXTURE_2D);
+    glColor4f(host_basepal[c * 3] / 255.0f, host_basepal[c * 3 + 1] / 255.0f,
+              host_basepal[c * 3 + 2] / 255.0f, 1.0f);
+
+    glBegin(GL_QUADS);
+    /* horizontal */
+    glVertex2f(cx - arm, cy - h);
+    glVertex2f(cx + arm + ((int)t & 1), cy - h);
+    glVertex2f(cx + arm + ((int)t & 1), cy - h + t);
+    glVertex2f(cx - arm, cy - h + t);
+    /* vertical */
+    glVertex2f(cx - h, cy - arm);
+    glVertex2f(cx - h + t, cy - arm);
+    glVertex2f(cx - h + t, cy + arm + ((int)t & 1));
+    glVertex2f(cx - h, cy + arm + ((int)t & 1));
+    glEnd();
+
+    glColor4f(1, 1, 1, 1);
+    glEnable(GL_TEXTURE_2D);
+}
+#else
 void
 Draw_Crosshair(void)
 {
@@ -673,6 +718,7 @@ Draw_Crosshair(void)
 
     Draw_Character(x, y, '+');
 }
+#endif /* TYRQUAKE_PS3 */
 
 /*
 =============
@@ -1044,6 +1090,14 @@ Draw_BeginDisc(void)
 {
     if (!draw_disc || scr_block_drawing)
 	return;
+#ifdef TYRQUAKE_PS3
+    /*
+     * PS3 port: no front buffer to draw into between frames (ps3gl only
+     * draws inside GL_BeginRendering/GL_EndRendering), and PS3 loads are
+     * quick anyway.
+     */
+    return;
+#endif
     glDrawBuffer(GL_FRONT);
     Draw_Pic(vid.width - 24, 0, draw_disc);
     glDrawBuffer(GL_BACK);

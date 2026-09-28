@@ -112,7 +112,18 @@ R_UpdateWarpTextures()
 
     glMatrixMode(GL_PROJECTION);
     glLoadIdentity();
+#ifdef TYRQUAKE_PS3
+    /*
+     * PS3 port: ps3gl's glCopyTexSubImage2D copies the frame's rows top
+     * down (the RSX's order), GL bottom up. Drawing the warp upside down
+     * makes the copy come out the right way round; the triangles' winding
+     * flips with it, so no culling while drawing them.
+     */
+    glOrtho(0, WARP_IMAGE_SIZE, WARP_IMAGE_SIZE, 0, -99999, 99999);
+    glDisable(GL_CULL_FACE);
+#else
     glOrtho(0, WARP_IMAGE_SIZE, 0, WARP_IMAGE_SIZE, -99999, 99999);
+#endif
     glMatrixMode(GL_MODELVIEW);
     glLoadIdentity();
 
@@ -156,6 +167,9 @@ R_UpdateWarpTextures()
 
     glDisableClientState(GL_TEXTURE_COORD_ARRAY);
     glDisableClientState(GL_VERTEX_ARRAY);
+#ifdef TYRQUAKE_PS3
+    glEnable(GL_CULL_FACE);
+#endif
 }
 
 

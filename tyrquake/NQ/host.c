@@ -637,8 +637,13 @@ _Host_Frame(float time)
     int pass1, pass2, pass3;
 
     /* something bad happened, or the server disconnected */
-    if (setjmp(host_abort))
+    if (setjmp(host_abort)) {
+#ifdef TYRQUAKE_PS3
+	extern void SCR_PS3_AbortUpdate(void);
+	SCR_PS3_AbortUpdate();
+#endif
 	return;
+    }
 
     /* keep the random time dependent */
     rand();

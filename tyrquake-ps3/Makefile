@@ -17,10 +17,32 @@
 # Expects to sit alongside a TyrQuake source checkout (adjust TQ_SRC below
 # to match your actual layout).
 #
+# Three independent choices, any combination (6 release PKGs):
+#
+#   RENDERER=gl (default)  OpenGL: TyrQuake's GL renderer (GLQuake) drawn
+#                          by the RSX through ps3gl (common/gl/)
+#   RENDERER=soft          the software renderer, drawn by the CPU
+#   MISSIONPACK=hipnotic / rogue
+#   DEBUG_BUILD=1
+#
+#   make                                 -> TyrQuake.gnpdrm.pkg
+#   make MISSIONPACK=hipnotic            -> TyrQuakeHipnotic.gnpdrm.pkg
+#   make MISSIONPACK=rogue               -> TyrQuakeRogue.gnpdrm.pkg
+#   make RENDERER=soft                   -> TyrQuakeSW.gnpdrm.pkg
+#   make RENDERER=soft MISSIONPACK=...   -> TyrQuakeHipnoticSW / TyrQuakeRogueSW
+#
+# Both renderers of a game are the SAME game for the PS3 (same APPID,
+# title and icon): installing one replaces the other, and they share the
+# game data, config.cfg and saves.
+#
+# Every variant builds in its own folder (obj/<target>, build/<target>):
+# switching variants needs no "make clean" any more.
+#
 include /usr/local/ps3dev/ppu_rules
 
 MISSIONPACK ?=
 DEBUG_BUILD ?=
+RENDERER ?= gl
 
 ifeq ($(MISSIONPACK),hipnotic)
     BASE_TARGET := TyrQuakeHipnotic
@@ -38,18 +60,13 @@ ifeq ($(MISSIONPACK),hipnotic)
     # "hipnotic"/"rogue" regardless), so its value doesn't matter --
     # just that -game is present at all.
     CFLAGS      += -DTYRQUAKE_MISSIONPACK_ARG='"-hipnotic"' -DTYRQUAKE_MISSIONPACK_NAME='"hipnotic"'
-    SYS_PS3_OBJ_BASE := sys_ps3_hipnotic
-    # Mission pack variants don't bundle id1/pak0.pak -- they run
-    # against the base game's already-installed data (same basedir,
-    # hardcoded in sys_ps3.c), and only need their own pak0.pak dropped
-    # into a hipnotic/ or rogue/ subfolder there.
-    # PKGFILES deliberately empty -- basedir is hardcoded to TYRQ00001's
-    # USRDIR regardless of which .pkg is actually running (see
-    # sys_ps3.c), so anything bundled here would install under THIS
-    # package's own folder (TYRQHIP01) instead -- a folder the running
-    # game never actually reads from. The hipnotic/ data (pak0.pak,
-    # optional music/) has to be placed under the shared TYRQ00001
-    # folder by hand instead; see README/install instructions.
+    # Mission pack variants don't bundle anything -- they run against
+    # the base game's already-installed data (same basedir, hardcoded in
+    # sys_ps3.c to TYRQ00001's USRDIR regardless of which .pkg is
+    # running), so anything bundled here would install under THIS
+    # package's own folder (TYRQHIP01), which the game never reads. The
+    # hipnotic/ data goes under the shared TYRQ00001 folder instead (the
+    # base PKG creates hipnotic/ and hipnotic/music/ there).
     PKGFILES  :=
     ICON0     := $(CURDIR)/ICON0_Hipnotic.PNG
 else ifeq ($(MISSIONPACK),rogue)
@@ -57,7 +74,6 @@ else ifeq ($(MISSIONPACK),rogue)
     BASE_TITLE  := TyrQuakeCell (Dissolution of Eternity)
     BASE_APPID  := TYRQROG01
     CFLAGS      += -DTYRQUAKE_MISSIONPACK_ARG='"-rogue"' -DTYRQUAKE_MISSIONPACK_NAME='"rogue"'
-    SYS_PS3_OBJ_BASE := sys_ps3_rogue
     # Same reasoning as hipnotic's PKGFILES above.
     PKGFILES  :=
     ICON0     := $(CURDIR)/ICON0_Rogue.PNG
@@ -65,33 +81,46 @@ else
     BASE_TARGET := TyrQuake
     BASE_TITLE  := TyrQuakeCell
     BASE_APPID  := TYRQ00001
-    SYS_PS3_OBJ_BASE := sys_ps3
     PKGFILES  := $(CURDIR)/pkgfiles
     ICON0     := $(CURDIR)/ICON0.PNG
 endif
 
-# DEBUG_BUILD is a second, independent axis on top of MISSIONPACK: a
-# separate .pkg (own APPID, so it installs alongside the release build
-# rather than overwriting it) with the testing/debugging tools this
-# project accumulated during development -- noclip, godmode, the L1+R1
-# level-skip shortcut, verbose diagnostic PS3_Log calls, and the
-# r_speeds/r_dspeeds render-stage profiling. None of that ships in the
-# default (release) build; see TYRQUAKE_DEBUG_BUILD's #ifdef sites in
-# in_ps3.c, vid_ps3.c, and (shared engine code) common/screen.c and
-# common/menu.c for exactly what's gated.
+# RENDERER only changes the file names, never what the PS3 sees (APPID,
+# title, icon): the two renderers are one game.
+ifeq ($(RENDERER),soft)
+    RENDERER_SUFFIX := SW
+else ifeq ($(RENDERER),gl)
+    RENDERER_SUFFIX :=
+else
+    $(error RENDERER must be gl or soft)
+endif
+
+# DEBUG_BUILD is a separate axis on top of the others: a separate .pkg
+# (own APPID, so it installs alongside the release build rather than
+# overwriting it) with the testing/debugging tools this project
+# accumulated during development -- noclip, godmode, the L1+R1 level-skip
+# shortcut, verbose diagnostic PS3_Log calls, the r_speeds/r_dspeeds
+# render-stage profiling (software) and the fps/timing log every 10 s. None
+# of that ships in the default (release) build; see TYRQUAKE_DEBUG_BUILD's
+# #ifdef sites in in_ps3.c, vid_ps3_sw.c, vid_ps3_common.c and (shared engine
+# code) common/screen.c and common/menu.c for exactly what's gated.
 ifeq ($(DEBUG_BUILD),1)
-    TARGET := $(BASE_TARGET)Debug
+    TARGET := $(BASE_TARGET)$(RENDERER_SUFFIX)Debug
     TITLE  := $(BASE_TITLE) Debug
     APPID  := TYRQDBG01
     CFLAGS += -DTYRQUAKE_DEBUG_BUILD
 else
-    TARGET := $(BASE_TARGET)
+    TARGET := $(BASE_TARGET)$(RENDERER_SUFFIX)
     TITLE  := $(BASE_TITLE)
     APPID  := $(BASE_APPID)
 endif
-SYS_PS3_OBJ := $(SYS_PS3_OBJ_BASE)$(if $(filter 1,$(DEBUG_BUILD)),_debug).o
 
 CONTENTID := UP0001-$(APPID)_00-0000000000000000
+
+# ppu_rules packs the PKG in $(BUILDDIR)/pkg and never empties it: one per
+# variant, or a mission pack PKG would carry the base game's folders.
+BUILDDIR := $(CURDIR)/build/$(TARGET)
+OBJDIR   := $(CURDIR)/obj/$(TARGET)
 
 CC := ppu-gcc
 LD := ppu-gcc
@@ -103,14 +132,16 @@ LD := ppu-gcc
 # top-level folder instead, this needs to be ../tyrquake/tyrquake-0.71.
 TQ_SRC := ../tyrquake
 
-CFLAGS += -DNQ_HACK
+CFLAGS += -DNQ_HACK -DTYRQUAKE_PS3
 # buildinfo.c wants these two -- normally auto-generated by tyrquake's own
 # Makefile (git describe + build timestamp). We don't need anything fancy,
 # just valid values so it compiles.
 CFLAGS += -DTYR_VERSION=0.71 -DTYR_VERSION_TIME=0LL
-# NOTE: deliberately NOT defining GLQUAKE -- it's used as `#ifdef GLQUAKE`
-# throughout (presence, not value), so simply omitting it selects the
-# software renderer path (SW_OBJS) instead of GL_OBJS.
+# GLQUAKE is used as `#ifdef GLQUAKE` throughout (presence, not value):
+# defined, the GL renderer (GL_OBJS); not defined, the software one.
+ifeq ($(RENDERER),gl)
+CFLAGS += -DGLQUAKE
+endif
 CFLAGS += -Icommon/compat -I$(TQ_SRC)/include -I$(TQ_SRC)/NQ -I$(TQ_SRC)/external -Icommon
 # PSL1GHT SDK headers (rsx/, sysutil/, lv2/, etc) -- ppu_rules already
 # exports this path in LIBPSL1GHT_INC, we just weren't using it yet.
@@ -126,7 +157,7 @@ LIBS := gcm_sys rsx sysutil io audio rt lv2 m
 
 # --- Source lists (see project notes for how these were derived from
 #     tyrquake's own Makefile OBJS groups: COMMON_OBJS, CL_OBJS, SV_OBJS,
-#     NQCL_OBJS, SW_OBJS) ---
+#     NQCL_OBJS, SW_OBJS, GL_OBJS) ---
 
 COMMON_SRCS := \
 	buildinfo.c cmd.c common.c crc.c cvar.c mathlib.c model.c \
@@ -136,11 +167,18 @@ COMMON_SRCS := \
 	r_part.c screen.c snd_dma.c snd_mem.c snd_mix.c snd_music.c \
 	sprite_model.c vid_mode.c wad.c \
 	pr_cmds.c pr_edict.c pr_exec.c sv_move.c sv_phys.c world.c \
+	cd_null.c
+
+SW_SRCS := \
 	d_edge.c d_fill.c d_init.c d_modech.c d_part.c d_polyse.c \
 	d_scan.c d_sky.c d_sprite.c d_surf.c d_vars.c draw.c \
 	r_aclip.c r_alias.c r_bsp.c r_draw.c r_edge.c r_main.c \
-	r_misc.c r_sky.c r_sprite.c r_surf.c r_vars.c \
-	cd_null.c
+	r_misc.c r_sky.c r_sprite.c r_surf.c r_vars.c
+
+GL_SRCS := \
+	drawhulls.c gl_draw.c gl_extensions.c gl_fog.c gl_mesh.c \
+	gl_model.c gl_rmain.c gl_rmisc.c gl_rsurf.c gl_sky.c \
+	gl_textures.c gl_warp.c qpic.c tga.c
 
 NQ_SRCS := \
 	cl_demo.c cl_main.c cl_parse.c cl_tent.c sbar.c view.c \
@@ -153,29 +191,38 @@ NQ_SRCS := \
 # drivers -- that's the standard "no networking" configuration, not a
 # workaround).
 
-PS3_SRCS := vid_ps3.c in_ps3.c snd_ps3.c
-# sys_ps3.c is compiled separately below (as $(SYS_PS3_OBJ)) since its
-# object filename -- and the -DTYRQUAKE_MISSIONPACK_ARG define baked into
-# it -- differs per variant, while every other object here is identical
-# across all three builds and doesn't need rebuilding between them.
+# ps3_video.c: RSX init, flips and the scaled blit to the TV (from
+# Quake2PS3), vid_ps3_common.c: resolutions and Video Settings, shared by
+# both renderers' drivers.
+PS3_SRCS := in_ps3.c snd_ps3.c sys_ps3.c ps3_video.c vid_ps3_common.c
 
-vpath %.c $(TQ_SRC)/common $(TQ_SRC)/NQ common
+ifeq ($(RENDERER),gl)
+RENDER_SRCS := $(GL_SRCS) vid_ps3_gl.c \
+	ps3gl_main.c ps3gl_state.c ps3gl_texture.c ps3gl_draw.c
+else
+RENDER_SRCS := $(SW_SRCS) vid_ps3_sw.c
+endif
 
-SRCS := $(COMMON_SRCS) $(NQ_SRCS) $(PS3_SRCS)
-OBJS := $(SRCS:.c=.o) $(SYS_PS3_OBJ)
+vpath %.c $(TQ_SRC)/common $(TQ_SRC)/NQ common common/gl
+
+SRCS := $(COMMON_SRCS) $(NQ_SRCS) $(PS3_SRCS) $(RENDER_SRCS)
+OBJS := $(addprefix $(OBJDIR)/,$(SRCS:.c=.o))
 
 all: $(TARGET).pkg
 
-%.o: %.c
-	$(CC) $(CFLAGS) -c $< -o $@
+$(OBJDIR):
+	@mkdir -p $@
 
-# Explicit rule for the variant-named sys_ps3 object -- the generic
-# pattern rule above only matches when the .o and .c share a filename
-# stem, which sys_ps3_hipnotic.o / sys_ps3_rogue.o don't (there's no
-# matching sys_ps3_hipnotic.c). CFLAGS here already carries whichever
-# -DTYRQUAKE_MISSIONPACK_ARG was set above for this MISSIONPACK value.
-sys_ps3_hipnotic.o sys_ps3_rogue.o sys_ps3.o sys_ps3_hipnotic_debug.o sys_ps3_rogue_debug.o sys_ps3_debug.o: common/sys_ps3.c
-	$(CC) $(CFLAGS) -c $< -o $@
+$(OBJDIR)/%.o: %.c | $(OBJDIR)
+	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
+
+# Headers too: a changed .h rebuilds whatever includes it.
+-include $(OBJS:.o=.d)
+
+# The file that talks to GCM the most goes at -O1 -fno-inline, like in
+# Quake2PS3 (Doom64-PS3's lesson: PSL1GHT's syscall stubs don't survive
+# aggressive inlining).
+$(OBJDIR)/ps3_video.o: CFLAGS := $(filter-out -O3,$(CFLAGS)) -O1 -fno-inline
 
 $(TARGET).elf: $(OBJS)
 	$(LD) $(OBJS) $(LIBPSL1GHT_LIB) -o $(TARGET).elf $(foreach lib,$(LIBS),-l$(lib))
@@ -183,20 +230,29 @@ $(TARGET).elf: $(OBJS)
 # $(TARGET).self and $(TARGET).pkg are NOT defined here -- they come from
 # ppu_rules' own %.self: %.elf and %.pkg: %.self pattern rules (see the
 # big comment at the top of this file). Those rules also pick up
-# $(PKGFILES) automatically and copy pak0.pak into place for us.
+# $(PKGFILES) automatically.
+#
+# The folders the base PKG creates on the PS3 are made here at build time:
+# they are empty (the player fills them by FTP), and git doesn't keep empty
+# folders. pkg.py packs empty folders too.
+PKG_DIRS := USRDIR/id1/music USRDIR/hipnotic/music USRDIR/rogue/music
+
+.PHONY: all clean pkgdirs
+pkgdirs:
+ifneq ($(PKGFILES),)
+	@for d in $(PKG_DIRS); do mkdir -p "$(PKGFILES)/$$d"; done
+endif
+
+$(TARGET).pkg: | pkgdirs
 
 clean:
-	# Only intermediate build files -- object files (which can go
-	# stale across variant switches, since different MISSIONPACK/
-	# DEBUG_BUILD values bake different CFLAGS into them) and this
-	# variant's own .elf/.self. Deliberately does NOT touch any .pkg:
-	# ppu_rules' own %.pkg rule already regenerates one fresh whenever
-	# its .self prerequisite is newer (which removing .self here
-	# guarantees), so there's no correctness reason to delete them --
-	# and deleting them here was actively harmful: "make clean && make
-	# DEBUG_BUILD=1" right after building the release variant computed
-	# clean's target name as if it were building release again (command-
-	# line variables only apply to the invocation they're passed to),
-	# deleting the release .pkg moments after building it.
-	rm -f *.o $(TARGET).elf $(TARGET).self $(TARGET).fake.self
-	rm -rf build
+	# Only intermediate build files, every variant's (object files,
+	# .elf/.self, the PKG staging folders). Deliberately does NOT touch
+	# any .pkg: ppu_rules' own %.pkg rule already regenerates one fresh
+	# whenever its .self prerequisite is newer (which removing .self here
+	# guarantees), so there's no correctness reason to delete them -- and
+	# deleting them here was actively harmful in 1.x ("make clean && make
+	# DEBUG_BUILD=1" right after building the release variant deleted the
+	# release .pkg).
+	rm -rf obj build
+	rm -f *.o TyrQuake*.elf TyrQuake*.self TyrQuake*.fake.self

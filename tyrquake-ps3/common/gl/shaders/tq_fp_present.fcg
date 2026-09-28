@@ -1,0 +1,12 @@
+/* The final pass to the TV (ps3_video.c) when brightness or gamma aren't
+   neutral: the frame, raised to an exponent, times a gain. The two values
+   come in TEXCOORD1 (same for the 4 corners), so changing them needs no
+   fragment program patching:
+     tc1.x = brightness (gain), tc1.y = exponent (Quake's "gamma") */
+void main(float2 tc0 : TEXCOORD0, float2 tc1 : TEXCOORD1,
+          uniform sampler2D tex0, out float4 oColor : COLOR)
+{
+    float3 c = tex2D(tex0, tc0).rgb;
+    c = pow(c, tc1.y) * tc1.x;
+    oColor = float4(saturate(c), 1.0);
+}

@@ -621,6 +621,15 @@ GL_GetWarpImageSize(qpic8_t *pic)
 {
     int size = qmin(pic->width * 4, WARP_RENDER_TEXTURE_SIZE);
 
+#ifdef TYRQUAKE_PS3
+    /*
+     * PS3 port: the resolution can change in Video Settings without the
+     * textures being reloaded, and the smallest OpenGL one is 640x480, so
+     * never more than 256: always fits the frame the warp is drawn into.
+     */
+    size = qmin(size, 256);
+#endif
+
     if (!gl_npotable || !gl_npot.value) {
         int original_size = size;
         size = 1;

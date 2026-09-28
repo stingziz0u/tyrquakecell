@@ -203,7 +203,12 @@ static cvar_t scr_conspeed = { "scr_conspeed", "300" };
 static cvar_t scr_showram = { "showram", "1" };
 static cvar_t scr_showturtle = { "showturtle", "0" };
 static cvar_t scr_showpause = { "showpause", "1" };
+#ifdef TYRQUAKE_PS3
+/* PS3 port: Video Settings > FPS Display (1 top left, 2 top right), saved */
+static cvar_t show_fps = { "show_fps", "0", CVAR_CONFIG };
+#else
 static cvar_t show_fps = { "show_fps", "0" };	/* set for running times */
+#endif
 #ifndef GLQUAKE
 static vrect_t *pconupdate;
 #endif
@@ -319,8 +324,14 @@ SCR_DrawFPS(void)
     }
 
     qsnprintf(st, sizeof(st), "%3d FPS", lastfps);
+#ifdef TYRQUAKE_PS3
+    /* PS3 port: in a top corner, clear of the status bar */
+    x = (show_fps.value >= 2) ? scr_scaled_width - strlen(st) * 8 - 8 : 8;
+    y = 8;
+#else
     x = scr_scaled_width - strlen(st) * 8 - 8;
     y = scr_scaled_height - sb_lines - 8;
+#endif
     Draw_String(x, y, st);
 }
 
@@ -744,8 +755,18 @@ SCR_CalcRefdef()
     else
 	sb_lines = 24 + 16 + 8;
 
+#ifdef TYRQUAKE_PS3
+    /*
+     * PS3 port: the 3D view ends where the status bar starts, as in the
+     * original Quake. TyrQuake draws the view under a see-through status
+     * bar from 100% up, and with a big HUD scale that hides almost all of
+     * the weapon.
+     */
+    sb_lines_hidden = sb_lines;
+#else
     /* Remove tile fill along side status bar when view is >= 100% */
     sb_lines_hidden = scr_viewsize.value < 100.0f ? sb_lines : 0;
+#endif
 
 // these calculations mirror those in R_Init() for r_refdef, but take no
 // account of water warping
@@ -1293,8 +1314,39 @@ WARNING: be very careful calling this from elsewhere, because the refresh
 needs almost the entire 256k of stack space!
 ==================
 */
+#ifdef TYRQUAKE_PS3
+/*
+ * PS3 port: never one frame inside another. A Con_Printf while a frame is
+ * being drawn (before the game is active every printed line updates the
+ * screen) would start a second one on the render target being drawn and
+ * flip in the middle.
+ */
+static void SCR_UpdateScreen_(void);
+static qboolean in_update;
+
+/* Host_Error jumps out of a frame: the next one must still happen */
+void
+SCR_PS3_AbortUpdate(void)
+{
+    in_update = false;
+}
+
 void
 SCR_UpdateScreen(void)
+{
+    if (in_update)
+	return;
+    in_update = true;
+    SCR_UpdateScreen_();
+    in_update = false;
+}
+
+static void
+SCR_UpdateScreen_(void)
+#else
+void
+SCR_UpdateScreen(void)
+#endif
 {
     static float old_viewsize, old_fov;
 #ifndef GLQUAKE
