@@ -28,8 +28,11 @@ Quake (id Software, 1996) -> TyrQuake (maintained fork) -> TyrQuakeCell (this pr
   keyboard (hit-or-miss depending on the specific keyboard model -- a
   known PS3-side limitation, not something this project can fix). Every
   action is rebindable from the in-game Customize Controls menu, including
-  the quicksave/quickload shortcuts this port adds. Mouse and joystick
-  sensitivity are both adjustable from Options.
+  the quicksave/quickload shortcuts this port adds and an optional
+  **lock-on** (unbound by default). Mouse and joystick sensitivity are both
+  adjustable from Options.
+- **Console**: Select + Triangle opens it from anywhere, and the PS3's own
+  on-screen keyboard types the commands -- no USB keyboard needed.
 - **Compatibility**: shareware and full registered Quake, save/load (regular
   and quicksave/quickload), demo playback, both official mission packs
   (*Scourge of Armagon* and *Dissolution of Eternity*) as separate installs
@@ -130,10 +133,25 @@ combined with `MISSIONPACK` too.
 | Back / Cancel (menu) | Circle or Start | |
 | Open/close menu | Start | Fixed, not rebindable |
 | Scoreboard | Select | While held (`+showscores`) |
+| Lock on | *(unbound)* | Bind it from Customize Controls ("lock on"). While held, the view turns toward the visible enemy closest to the crosshair and follows it; the sticks still work |
+| Console | Select + Triangle | Opens / closes it, in game or in the menu |
 | Clear a binding | Select | While inside Customize Controls only |
 
-Everything above except Start and Select's menu role is rebindable from
-Options -> Customize Controls.
+Everything above except Start, the console and Select's menu role is
+rebindable from Options -> Customize Controls. Select is also the console
+modifier: on its own it reaches the game when released, or after a quarter
+of a second while held, so Select + Triangle never triggers either button.
+
+With the console open:
+
+| Action | Button |
+|---|---|
+| Type a command (PS3 on-screen keyboard, runs it when accepted) | Cross |
+| Run the current line | Triangle |
+| Complete the command (Tab) | Square |
+| Command history / erase a character | D-pad up, down / left |
+| Scroll the console | L1 / R1 |
+| Close the console | Circle (or Select + Triangle) |
 
 ## Known limitations
 

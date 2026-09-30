@@ -6,6 +6,7 @@
 // below for what each one means.
 
 #include "quakedef.h"
+#include "cmd.h"
 #include "keys.h"
 #include "menu.h"
 
@@ -13,6 +14,7 @@
 #include "client.h"
 #include "host.h"
 #include "server.h"
+#include "world.h"
 #endif
 #ifdef QW_HACK
 #include "protocol.h"
@@ -21,6 +23,8 @@
 #include <io/pad.h>
 #include <io/kb.h>
 #include <io/mouse.h>
+
+#include "ps3_osk.h"
 
 cvar_t _windowed_mouse = { "_windowed_mouse", "0", CVAR_CONFIG };
 // m_filter is declared locally by every platform driver (not a shared
@@ -143,7 +147,7 @@ PS3_NextLevel(void)
     for (int i = 0; i < sizeof(ps3_next_level_table) / sizeof(ps3_next_level_table[0]); i++) {
 	if (!strcmp(sv.name, ps3_next_level_table[i].from)) {
 	    PS3_Log("PS3_NextLevel: %s -> %s", sv.name, ps3_next_level_table[i].to);
-	    Cbuf_AddText(va("changelevel %s\n", ps3_next_level_table[i].to));
+	    Cbuf_AddText("changelevel %s\n", ps3_next_level_table[i].to);
 	    return;
 	}
     }
@@ -473,6 +477,174 @@ PS3_Mouse_Update(void)
     }
 }
 
+// --- Lock-on (+lockon) ---
+// Same idea as ioRTWC-PS3's (itself from RealRTCW): while the button is
+// held, the view turns toward an enemy -- the visible one closest to the
+// crosshair within cl_lockon_angle degrees and cl_lockon_range units --
+// keeps it while it lives and stays in sight (it may hide for a moment)
+// and moves on to the next one when it dies. The turn is smooth
+// (cl_lockon_speed per second, a fraction of the remaining angle) and the
+// sticks and the mouse still add their own. Unbound by default, so the
+// usual layout does not change: bind it from Customize Controls.
+//
+// Single player runs the server in the same process, so the monsters are
+// read from its edicts: FL_MONSTER with health left, and a line of sight
+// through the world (MOVE_NOMONSTERS: only walls and doors block it).
+// Without a local server (a demo playing) it does nothing.
+
+static cvar_t cl_lockon_speed = { "cl_lockon_speed", "12", CVAR_CONFIG };
+static cvar_t cl_lockon_angle = { "cl_lockon_angle", "30", CVAR_CONFIG };
+static cvar_t cl_lockon_range = { "cl_lockon_range", "2048", CVAR_CONFIG };
+
+#define LOCK_KEEP_TIME  0.4     // a locked target may hide this long
+#define LOCK_KEEP_ANGLE 60.0f   // and drift this far off the crosshair
+
+static qboolean lockon_held;
+static int lock_target = -1;    // edict number, -1 = none
+static double lock_seen_time;   // realtime it was last visible
+
+static void IN_LockOnDown(void) { lockon_held = true; }
+static void IN_LockOnUp(void) { lockon_held = false; }
+
+static qboolean
+PS3_LockOnIsEnemy(const edict_t *ent)
+{
+    if (ent->free || !((int)ent->v.flags & FL_MONSTER))
+	return false;
+    // dead, or lying down (zombies) / not hittable
+    if (ent->v.health <= 0 || ent->v.takedamage == DAMAGE_NO
+	|| ent->v.solid == SOLID_NOT)
+	return false;
+    return true;
+}
+
+// a bit above the middle of its box: the chest of a Quake monster
+static void
+PS3_LockOnPoint(const edict_t *ent, vec3_t out)
+{
+    out[0] = ent->v.origin[0] + (ent->v.mins[0] + ent->v.maxs[0]) * 0.5f;
+    out[1] = ent->v.origin[1] + (ent->v.mins[1] + ent->v.maxs[1]) * 0.5f;
+    out[2] = ent->v.origin[2] + ent->v.mins[2]
+	+ (ent->v.maxs[2] - ent->v.mins[2]) * 0.6f;
+}
+
+static qboolean
+PS3_LockOnVisible(const vec3_t eye, const vec3_t point, const edict_t *player)
+{
+    trace_t trace;
+
+    SV_TraceMove(eye, vec3_origin, vec3_origin, point, MOVE_NOMONSTERS,
+		 player, &trace);
+    return !trace.allsolid && trace.fraction >= 0.999f;
+}
+
+static float
+PS3_AngleDelta(float a)
+{
+    a = fmodf(a, 360.0f);
+    if (a > 180.0f)
+	a -= 360.0f;
+    else if (a < -180.0f)
+	a += 360.0f;
+    return a;
+}
+
+// The turn from the current view to the point, and how far off it is.
+// Quake's view pitch is positive looking down.
+static float
+PS3_LockOnDelta(const vec3_t eye, const vec3_t point, float *dyaw, float *dpitch)
+{
+    float dx = point[0] - eye[0];
+    float dy = point[1] - eye[1];
+    float dz = point[2] - eye[2];
+    float yaw = atan2f(dy, dx) * (180.0f / M_PI);
+    float pitch = -atan2f(dz, sqrtf(dx * dx + dy * dy)) * (180.0f / M_PI);
+
+    *dyaw = PS3_AngleDelta(yaw - cl.viewangles[YAW]);
+    *dpitch = PS3_AngleDelta(pitch - cl.viewangles[PITCH]);
+    return sqrtf(*dyaw * *dyaw + *dpitch * *dpitch);
+}
+
+// Returns true when it turned the view.
+static qboolean
+PS3_LockOn(void)
+{
+    const edict_t *player, *ent, *best = NULL;
+    vec3_t eye, point;
+    float dyaw, dpitch, off, frac, dt, best_score = 1e9f;
+    int i;
+
+    if (!lockon_held || !sv.active || cls.demoplayback || cl.intermission
+	|| cl.stats[STAT_HEALTH] <= 0
+	|| cl.viewentity < 1 || cl.viewentity >= sv.num_edicts) {
+	lock_target = -1;
+	return false;
+    }
+
+    player = EDICT_NUM(cl.viewentity);
+    VectorAdd(player->v.origin, player->v.view_ofs, eye);
+
+    // keep the locked one while it lives and has not been out of sight long
+    if (lock_target > 0 && lock_target < sv.num_edicts) {
+	ent = EDICT_NUM(lock_target);
+	if (PS3_LockOnIsEnemy(ent)) {
+	    PS3_LockOnPoint(ent, point);
+	    off = PS3_LockOnDelta(eye, point, &dyaw, &dpitch);
+	    if (PS3_LockOnVisible(eye, point, player))
+		lock_seen_time = realtime;
+	    if (off <= LOCK_KEEP_ANGLE && realtime - lock_seen_time <= LOCK_KEEP_TIME)
+		best = ent;
+	}
+    }
+
+    // or take the one closest to the crosshair
+    if (!best) {
+	lock_target = -1;
+	for (i = 1; i < sv.num_edicts; i++) {
+	    vec3_t d;
+	    float dist, score;
+
+	    ent = EDICT_NUM(i);
+	    if (i == cl.viewentity || !PS3_LockOnIsEnemy(ent))
+		continue;
+	    PS3_LockOnPoint(ent, point);
+	    VectorSubtract(point, eye, d);
+	    dist = Length(d);
+	    if (dist > cl_lockon_range.value)
+		continue;
+	    off = PS3_LockOnDelta(eye, point, &dyaw, &dpitch);
+	    if (off > cl_lockon_angle.value)
+		continue;
+	    score = off + dist * 0.005f; // 200 units farther weigh like 1 degree
+	    if (score >= best_score || !PS3_LockOnVisible(eye, point, player))
+		continue;
+	    best_score = score;
+	    best = ent;
+	    lock_target = i;
+	}
+	if (!best)
+	    return false;
+	lock_seen_time = realtime;
+#ifdef TYRQUAKE_DEBUG_BUILD
+	{
+	    extern void PS3_Log(const char *fmt, ...);
+	    PS3_Log("[lock] edict %d, score %.1f", lock_target, best_score);
+	}
+#endif
+    }
+
+    // turn a fraction of the way, the same per second at any frame rate
+    PS3_LockOnPoint(best, point);
+    PS3_LockOnDelta(eye, point, &dyaw, &dpitch);
+    dt = (float)host_frametime;
+    if (dt > 0.1f)
+	dt = 0.1f;
+    frac = 1.0f - expf(-cl_lockon_speed.value * dt);
+    cl.viewangles[YAW] += dyaw * frac;
+    cl.viewangles[PITCH] += dpitch * frac;
+    return true;
+}
+
 void
 IN_Init(void)
 {
@@ -502,6 +674,7 @@ IN_Init(void)
 void
 IN_Shutdown(void)
 {
+    PS3_OSK_Shutdown();
     ioKbEnd();
     ioMouseEnd();
 }
@@ -547,7 +720,10 @@ IN_Commands(void)
     }
 
     pad_buttons_prev = pad_buttons;
-    pad_buttons = (pad_data.button[2] << 8) | (pad_data.button[3] & 0xff);
+    // SELECT + TRIANGLE (console), the console's pad controls and the XMB
+    // keyboard take what they use out of the mask first (ps3_osk.c).
+    pad_buttons = PS3_ConsolePad_Filter((pad_data.button[2] << 8)
+					| (pad_data.button[3] & 0xff));
 
     // Edge-triggered actions (fire on press, not held).
     unsigned pressed = pad_buttons & ~pad_buttons_prev;
@@ -845,6 +1021,10 @@ IN_Move(usercmd_t *cmd)
 	}
     }
 
+    // Lock-on: after the sticks and the mouse, so it has the last word.
+    if (PS3_LockOn())
+	did_look = true;
+
     if (did_look) {
 	if (cl.viewangles[PITCH] > cl_maxpitch.value)
 	    cl.viewangles[PITCH] = cl_maxpitch.value;
@@ -877,6 +1057,8 @@ IN_ModeChanged(void)
 void
 IN_AddCommands(void)
 {
+    Cmd_AddCommand("+lockon", IN_LockOnDown);
+    Cmd_AddCommand("-lockon", IN_LockOnUp);
 }
 
 void
@@ -886,4 +1068,7 @@ IN_RegisterVariables(void)
     Cvar_RegisterVariable(&m_filter);
     Cvar_RegisterVariable(&joy_sensitivity);
     Cvar_RegisterVariable(&joy_invertlook);
+    Cvar_RegisterVariable(&cl_lockon_speed);
+    Cvar_RegisterVariable(&cl_lockon_angle);
+    Cvar_RegisterVariable(&cl_lockon_range);
 }

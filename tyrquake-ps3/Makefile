@@ -194,7 +194,7 @@ NQ_SRCS := \
 # ps3_video.c: RSX init, flips and the scaled blit to the TV (from
 # Quake2PS3), vid_ps3_common.c: resolutions and Video Settings, shared by
 # both renderers' drivers.
-PS3_SRCS := in_ps3.c snd_ps3.c sys_ps3.c ps3_video.c vid_ps3_common.c
+PS3_SRCS := in_ps3.c ps3_osk.c snd_ps3.c sys_ps3.c ps3_video.c vid_ps3_common.c
 
 ifeq ($(RENDERER),gl)
 RENDER_SRCS := $(GL_SRCS) vid_ps3_gl.c \

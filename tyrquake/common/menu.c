@@ -705,6 +705,9 @@ typedef enum {
     M_KEYS_CURSOR_MOVEDOWN,
     M_KEYS_CURSOR_QUICKSAVE,
     M_KEYS_CURSOR_QUICKLOAD,
+#ifdef TYRQUAKE_PS3
+    M_KEYS_CURSOR_LOCKON,
+#endif
 #ifdef TYRQUAKE_DEBUG_BUILD
     M_KEYS_CURSOR_NOCLIP,
     M_KEYS_CURSOR_GOD,
@@ -734,6 +737,10 @@ static const char *const m_keys_bindnames[M_KEYS_CURSOR_LINES][2] = {
     {"+movedown", "swim down"},
     {"save quick", "quicksave"},
     {"load quick", "quickload"},
+#ifdef TYRQUAKE_PS3
+    /* in_ps3.c; unbound by default */
+    {"+lockon", "lock on"},
+#endif
 #ifdef TYRQUAKE_DEBUG_BUILD
     {"noclip", "noclip"},
     {"god", "god mode"},
