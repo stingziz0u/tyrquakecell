@@ -903,6 +903,8 @@ M_Keys_Key(knum_t keynum)
 /* VIDEO MENU */
 
 #ifdef TYRQUAKE_PS3
+#include "ps3_launcher.h"   /* the Renderer line (1.6.0) */
+
 /*
  * PS3 port: Video Settings (Options > Video Settings), instead of the
  * desktop video modes menu. The values live in vid_ps3_common.c's cvars
@@ -910,6 +912,7 @@ M_Keys_Key(knum_t keynum)
  * of the frame.
  */
 typedef enum {
+    M_VIDEO_CURSOR_RENDERER,        /* restarts the game (1.6.0) */
     M_VIDEO_CURSOR_RESOLUTION,
     M_VIDEO_CURSOR_HUDSCALE,
     M_VIDEO_CURSOR_BRIGHTNESS,
@@ -977,9 +980,12 @@ M_Video_Draw(void)
     pic = Draw_CachePic("gfx/p_option.lmp");
     M_DrawTransPic((320 - pic->width) / 2, 4, pic);
 
+    M_Print(16, height = 32, "              Renderer");
+    M_Print(220, height, PS3_Renderer_Chosen() ? "OpenGL" : "Software");
+
     mode = VID_PS3_CurrentMode();
     qsnprintf(buf, sizeof(buf), "%dx%d", VID_PS3_ModeWidth(mode), VID_PS3_ModeHeight(mode));
-    M_Print(16, height = 32, "            Resolution");
+    M_Print(16, height += 8, "            Resolution");
     M_Print(220, height, buf);
 
     if (vid_ps3_hudscale.value > 0.0f)
@@ -1026,6 +1032,12 @@ M_Video_Draw(void)
 
     M_Print(16, height += 8, "     Reset to defaults");
 
+    /* the renderer is compiled in: the other one is another program */
+    if (PS3_Renderer_Chosen() != PS3_Renderer_Running()) {
+        M_PrintWhite(16, height += 16, "   X on Renderer: restart now");
+        M_PrintWhite(16, height += 8, "  (or from the next game on)");
+    }
+
     M_DrawCursor(200, 32 + m_video_cursor * 8, 12);
 }
 
@@ -1038,6 +1050,9 @@ M_Video_Adjust(int dir)
     S_LocalSound("misc/menu3.wav");
 
     switch (m_video_cursor) {
+    case M_VIDEO_CURSOR_RENDERER:
+	PS3_Renderer_Choose(!PS3_Renderer_Chosen());
+	break;
     case M_VIDEO_CURSOR_RESOLUTION:
 	count = VID_PS3_NumModes();
 	mode = (VID_PS3_CurrentMode() + dir + count) % count;
@@ -1102,6 +1117,9 @@ M_Video_Key(knum_t keynum)
 	m_entersound = true;
 	if (m_video_cursor == M_VIDEO_CURSOR_RESET)
 	    VID_PS3_ResetSettings();
+	else if (m_video_cursor == M_VIDEO_CURSOR_RENDERER
+		 && PS3_Renderer_Chosen() != PS3_Renderer_Running())
+	    PS3_Renderer_Restart();
 	else
 	    M_Video_Adjust(1);
 	break;

@@ -15,9 +15,15 @@ Quake (id Software, 1996) -> TyrQuake (maintained fork) -> TyrQuakeCell (this pr
 
 ## Features
 
+- **One package, one launcher** (1.6.0): Quake, both mission packs and
+  your mods in a single install. At start a menu lists what is installed
+  (skipped when there is only one thing to play); Quit from the game's menu
+  comes back to it.
 - **Video**: TyrQuake's OpenGL renderer drawn by the RSX (stable 60fps, up
-  to 1280x720), or the original software renderer in the separate "SW"
-  packages. Everything is set from Options -> Video Settings: resolution,
+  to 1280x720), or the original software renderer, chosen in Options ->
+  Video Settings -> Renderer (the game restarts in the other one: the two
+  renderers are two programs in the package; Square in the launcher
+  changes it too). Everything else is set from Video Settings as well: resolution,
   HUD scale, brightness, gamma, TV screen fit, scaling, frame rate, FPS
   display, and (OpenGL only) texture filtering (off / bilinear /
   trilinear, `gl_texturemode`) and model shadows (`r_shadows`).
@@ -35,8 +41,8 @@ Quake (id Software, 1996) -> TyrQuake (maintained fork) -> TyrQuakeCell (this pr
   on-screen keyboard types the commands -- no USB keyboard needed.
 - **Compatibility**: shareware and full registered Quake, save/load (regular
   and quicksave/quickload), demo playback, both official mission packs
-  (*Scourge of Armagon* and *Dissolution of Eternity*) as separate installs
-  sharing one copy of the base game data.
+  (*Scourge of Armagon* and *Dissolution of Eternity*) and mods (`-game`
+  folders), all sharing one copy of the base game data.
 
 ## Requirements
 
@@ -60,11 +66,8 @@ Quake (id Software, 1996) -> TyrQuake (maintained fork) -> TyrQuakeCell (this pr
    TYRQ00001/USRDIR/id1/music/          <- optional, track02.ogg .. track11.ogg
    ```
 
-3. **Mission packs are optional, separate installs** that share the data
-   above -- install `TyrQuakeHipnotic.gnpdrm.pkg` and/or
-   `TyrQuakeRogue.gnpdrm.pkg` from the XMB (shown as "TyrQuakeCell (Scourge
-   of Armagon)" and "TyrQuakeCell (Dissolution of Eternity)", each with its
-   own icon), then drop each expansion's own `pak0.pak` into:
+3. **Mission packs are optional**: drop each expansion's own `pak0.pak` into
+   its folder and it shows up in the launcher:
 
    ```
    TYRQ00001/USRDIR/hipnotic/pak0.pak   <- Scourge of Armagon
@@ -74,6 +77,17 @@ Quake (id Software, 1996) -> TyrQuake (maintained fork) -> TyrQuakeCell (this pr
    Both mission packs shipped with their own soundtrack, separate from the
    base game's. If you have those, they go in `hipnotic/music/` and
    `rogue/music/` respectively, same naming convention as above.
+
+4. **Mods**: every other folder in `USRDIR` with a `pak0.pak` or a
+   `progs.dat` in it is listed on the launcher's MODS tab (L1/R1) and runs
+   as `-game <folder>`. An optional `mod.txt` in the folder gives the name
+   shown, as `name = Arcane Dimensions`. Mods made for the mission packs
+   (which need `-hipnotic` / `-rogue` on top of their own folder) are not
+   supported.
+
+   If you installed the separate mission pack or "SW" packages of earlier
+   versions (`TYRQHIP01`, `TYRQROG01`), they can be deleted: this one
+   package does everything, with the same data, saves and `config.cfg`.
 
    **Filenames are case-sensitive.** `pak0.pak` and `PAK0.PAK` are two
    different files as far as the PS3's filesystem is concerned -- if a pak
@@ -98,23 +112,22 @@ Quake (id Software, 1996) -> TyrQuake (maintained fork) -> TyrQuakeCell (this pr
    ```bash
    git clone https://github.com/stingziz0u/TyrQuakeCell.git
    cd TyrQuakeCell/tyrquake-ps3
-   make                                 # base game -> TyrQuake.gnpdrm.pkg
-   make MISSIONPACK=hipnotic            # -> TyrQuakeHipnotic.gnpdrm.pkg
-   make MISSIONPACK=rogue               # -> TyrQuakeRogue.gnpdrm.pkg
-   make RENDERER=soft                   # software renderer -> TyrQuakeSW.gnpdrm.pkg
+   make                                 # -> TyrQuake.gnpdrm.pkg
    make DEBUG_BUILD=1                   # -> TyrQuakeDebug.gnpdrm.pkg
    ```
 
-Every variant builds in its own folder (`obj/<target>`), so no `make clean`
-is needed between them. Both renderers of a game install as the same game
-(same APPID) and share its data, `config.cfg` and saves.
+`make` builds both programs, OpenGL (`EBOOT.BIN`, and `RELOAD.SELF` for
+starting it again) and software (`TYRQUAKE_SW.SELF`), each in its own
+folder (`obj/<target>`), and puts them in the one package. The launcher
+starts the renderer chosen in Video Settings (saved in
+`USRDIR/ps3_renderer.txt`).
 
 `DEBUG_BUILD=1` adds testing tools not present in the release build: noclip
 and god mode (bindable from Customize Controls, not bound by default), an
 L1+R1 "skip to next level" shortcut (uses `changelevel` directly, so it also
 skips past the Chthon and Shub-Niggurath boss encounters rather than
-requiring them), and verbose diagnostic logging. `DEBUG_BUILD` can be
-combined with `MISSIONPACK` too.
+requiring them), and verbose diagnostic logging. It installs next to the
+release package (its own APPID) and plays the same game data.
 
 
 ## Controls

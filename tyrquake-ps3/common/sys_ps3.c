@@ -25,6 +25,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #include "common.h"
 #include "console.h"
 #include "host.h"
+#include "ps3_launcher.h"
 #include "errno.h"
 #include <unistd.h> /* usleep */
 
@@ -123,7 +124,8 @@ Sys_MakeCodeUnwriteable(void *start_addr, void *end_addr)
  * and flushes on every call (deliberately not buffered/kept open) so that
  * if the game crashes hard right after a call, the line we just wrote is
  * still on disk -- that's the whole point of this function existing. */
-#define PS3_LOG_PATH "/dev_hdd0/game/TYRFRESH1/USRDIR/tyrquake_log.txt"
+#define PS3_LOG_PATH     PS3_APP_DIR "/tyrquake_log.txt"
+#define PS3_LOG_OLD_PATH PS3_APP_DIR "/tyrquake_log.old.txt"
 
 void
 PS3_Log(const char *fmt, ...)
@@ -218,6 +220,8 @@ Sys_Quit(void)
      * into a dead process and crashed the whole console. */
     PS3_Log("Sys_Quit: shutting down");
     Host_Shutdown();
+    /* 1.6.0: back to the launcher, unless the XMB asked to quit */
+    PS3_Launcher_Relaunch();
     exit(0);
 }
 
@@ -328,7 +332,14 @@ PS3_SysutilCallback(u64 status, u64 param, void *userdata)
     (void)userdata;
     switch (status) {
     case SYSUTIL_EXIT_GAME:
+	/* the launcher's menu: no engine yet, it leaves by itself */
+	if (ps3_launcher_active) {
+	    PS3_Log("PS3_SysutilCallback: SYSUTIL_EXIT_GAME in the launcher");
+	    ps3_launcher_quit_requested = 1;
+	    break;
+	}
 	PS3_Log("PS3_SysutilCallback: SYSUTIL_EXIT_GAME -- shutting down cleanly");
+	ps3_quit_to_xmb = 1;
 	// Host_Shutdown() (NQ/host.c) does everything a clean exit needs --
 	// writes config.cfg (every CVAR_CONFIG cvar: sensitivity,
 	// joy_sensitivity, sound/music volume, key bindings, etc.), shuts
@@ -364,7 +375,19 @@ PS3_QuakeThread(void *arg)
     quakeparms_t parms;
     double oldtime, newtime, dt;
 
-    remove(PS3_LOG_PATH); /* fresh log each run */
+    /* fresh log each run, the last one kept as .old -- but not when the
+       launcher of the other renderer started this program: its lines are
+       the start of this run */
+    {
+	FILE *f = fopen(PS3_APP_DIR "/ps3_launch.txt", "r");
+
+	if (f) {
+	    fclose(f);
+	} else {
+	    remove(PS3_LOG_OLD_PATH);
+	    rename(PS3_LOG_PATH, PS3_LOG_OLD_PATH);
+	}
+    }
     PS3_Log("=== TyrQuake PS3 boot (worker thread) ===");
 
     if (sysUtilRegisterCallback(0, PS3_SysutilCallback, NULL) != 0)
@@ -381,36 +404,16 @@ PS3_QuakeThread(void *arg)
     }
     PS3_Log("Heap allocated OK: %d bytes", parms.memsize);
 
-    /* Matches APPID=TYRQ00001 from the Makefile (9 chars, correct PS3
-     * TITLE_ID format). This is where the PS3 installs the .pkg's USRDIR
-     * contents. Quake itself then looks for pak0.pak inside a "id1"
-     * subfolder of this path (standard Quake convention), i.e.
-     * .../USRDIR/id1/pak0.pak */
-    parms.basedir = "/dev_hdd0/game/TYRQ00001/USRDIR";
+    /* The game data is in the base package's USRDIR for every build (the
+     * debug one has its own APPID): Quake looks for id1/pak0.pak there. */
+    parms.basedir = PS3_DATA_DIR;
     PS3_Log("basedir = %s", parms.basedir);
 
-#ifdef TYRQUAKE_MISSIONPACK_ARG
-    // Mission pack variants (Hipnotic/Rogue) are separate .pkg builds
-    // from the same source -- see Makefile's MISSIONPACK variable. This
-    // synthesizes the equivalent of running "quake -game hipnotic
-    // -hipnotic" from a command line -- BOTH arguments are required
-    // together (see the Makefile's comment on this, from actually
-    // reading COM_InitGameDirectoryFromCommandLine in common.c: passing
-    // only "-hipnotic" alone silently does nothing at all, since that
-    // function bails out before ever loading the hipnotic/ directory or
-    // setting the QuakeC-visible "hipnotic" flag unless "-game <dir>"
-    // is also present). There's no menu option for this, only launch
-    // arguments, and the PS3 never gives us real argv, so we build our
-    // own.
-    static char arg0[] = "TyrQuake";
-    static char arg1[] = "-game";
-    static char arg2[] = TYRQUAKE_MISSIONPACK_NAME;
-    static char arg3[] = TYRQUAKE_MISSIONPACK_ARG;
-    static char *mp_argv[] = { arg0, arg1, arg2, arg3 };
-    g_argc = 4;
-    g_argv = mp_argv;
-    PS3_Log("Mission pack build: injecting argv = { %s %s %s %s }", arg0, arg1, arg2, arg3);
-#endif
+    /* 1.6.0: one package for the three games and both renderers. The
+     * launcher picks the game and gives its command line (-game hipnotic
+     * -hipnotic and so on, which the PS3 never passes us), or starts the
+     * other renderer's program and doesn't come back. */
+    PS3_Launcher_Run(&g_argc, &g_argv);
 
     COM_InitArgv(g_argc, (const char **)g_argv);
     PS3_Log("COM_InitArgv OK");

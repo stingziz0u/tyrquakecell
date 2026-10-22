@@ -17,76 +17,35 @@
 # Expects to sit alongside a TyrQuake source checkout (adjust TQ_SRC below
 # to match your actual layout).
 #
-# Three independent choices, any combination (6 release PKGs):
+# One package (1.6.0) for Quake, both mission packs and mods, with both
+# renderers: the launcher (common/ps3_launcher.c) picks the game, Video
+# Settings the renderer. The renderer is compiled in (#ifdef GLQUAKE), so
+# the package carries two programs:
 #
-#   RENDERER=gl (default)  OpenGL: TyrQuake's GL renderer (GLQuake) drawn
-#                          by the RSX through ps3gl (common/gl/)
-#   RENDERER=soft          the software renderer, drawn by the CPU
-#   MISSIONPACK=hipnotic / rogue
-#   DEBUG_BUILD=1
+#   EBOOT.BIN          OpenGL (TyrQuake.elf)
+#   RELOAD.SELF        the same, as a plain SELF (sysProcessExitSpawn2
+#                      cannot start the NPDRM EBOOT.BIN)
+#   TYRQUAKE_SW.SELF   the software renderer (TyrQuakeSW.self)
 #
-#   make                                 -> TyrQuake.gnpdrm.pkg
-#   make MISSIONPACK=hipnotic            -> TyrQuakeHipnotic.gnpdrm.pkg
-#   make MISSIONPACK=rogue               -> TyrQuakeRogue.gnpdrm.pkg
-#   make RENDERER=soft                   -> TyrQuakeSW.gnpdrm.pkg
-#   make RENDERER=soft MISSIONPACK=...   -> TyrQuakeHipnoticSW / TyrQuakeRogueSW
+#   make                 -> TyrQuake.gnpdrm.pkg (builds both programs)
+#   make DEBUG_BUILD=1   -> TyrQuakeDebug.gnpdrm.pkg
 #
-# Both renderers of a game are the SAME game for the PS3 (same APPID,
-# title and icon): installing one replaces the other, and they share the
-# game data, config.cfg and saves.
+#   make RENDERER=soft   -> only TyrQuakeSW.self (the package's make does
+#                           this one itself)
 #
-# Every variant builds in its own folder (obj/<target>, build/<target>):
-# switching variants needs no "make clean" any more.
+# Each program builds in its own folder (obj/<target>, build/<target>).
 #
 include /usr/local/ps3dev/ppu_rules
 
-MISSIONPACK ?=
 DEBUG_BUILD ?=
 RENDERER ?= gl
 
-ifeq ($(MISSIONPACK),hipnotic)
-    BASE_TARGET := TyrQuakeHipnotic
-    BASE_TITLE  := TyrQuakeCell (Scourge of Armagon)
-    BASE_APPID  := TYRQHIP01
-    # Both defines are required together -- confirmed by reading
-    # COM_InitGameDirectoryFromCommandLine (common.c): "-hipnotic" alone
-    # only sets a local game_type variable, but the function bails out
-    # (returns without ever calling COM_InitGameDirectory -- meaning the
-    # hipnotic/ search path never gets added AND the QuakeC-visible
-    # "hipnotic" global never gets set true, so even the new weapons/
-    # monsters wouldn't activate) unless "-game <dir>" is ALSO present.
-    # The actual directory name passed to -game is ignored by
-    # COM_InitGameDirectory's HIPNOTIC/ROGUE switch cases (they hardcode
-    # "hipnotic"/"rogue" regardless), so its value doesn't matter --
-    # just that -game is present at all.
-    CFLAGS      += -DTYRQUAKE_MISSIONPACK_ARG='"-hipnotic"' -DTYRQUAKE_MISSIONPACK_NAME='"hipnotic"'
-    # Mission pack variants don't bundle anything -- they run against
-    # the base game's already-installed data (same basedir, hardcoded in
-    # sys_ps3.c to TYRQ00001's USRDIR regardless of which .pkg is
-    # running), so anything bundled here would install under THIS
-    # package's own folder (TYRQHIP01), which the game never reads. The
-    # hipnotic/ data goes under the shared TYRQ00001 folder instead (the
-    # base PKG creates hipnotic/ and hipnotic/music/ there).
-    PKGFILES  :=
-    ICON0     := $(CURDIR)/ICON0_Hipnotic.PNG
-else ifeq ($(MISSIONPACK),rogue)
-    BASE_TARGET := TyrQuakeRogue
-    BASE_TITLE  := TyrQuakeCell (Dissolution of Eternity)
-    BASE_APPID  := TYRQROG01
-    CFLAGS      += -DTYRQUAKE_MISSIONPACK_ARG='"-rogue"' -DTYRQUAKE_MISSIONPACK_NAME='"rogue"'
-    # Same reasoning as hipnotic's PKGFILES above.
-    PKGFILES  :=
-    ICON0     := $(CURDIR)/ICON0_Rogue.PNG
-else
-    BASE_TARGET := TyrQuake
-    BASE_TITLE  := TyrQuakeCell
-    BASE_APPID  := TYRQ00001
-    PKGFILES  := $(CURDIR)/pkgfiles
-    ICON0     := $(CURDIR)/ICON0.PNG
-endif
+BASE_TARGET := TyrQuake
+BASE_TITLE  := TyrQuakeCell
+BASE_APPID  := TYRQ00001
+PKGFILES    := $(CURDIR)/pkgfiles
+ICON0       := $(CURDIR)/ICON0.PNG
 
-# RENDERER only changes the file names, never what the PS3 sees (APPID,
-# title, icon): the two renderers are one game.
 ifeq ($(RENDERER),soft)
     RENDERER_SUFFIX := SW
 else ifeq ($(RENDERER),gl)
@@ -104,21 +63,28 @@ endif
 # of that ships in the default (release) build; see TYRQUAKE_DEBUG_BUILD's
 # #ifdef sites in in_ps3.c, vid_ps3_sw.c, vid_ps3_common.c and (shared engine
 # code) common/screen.c and common/menu.c for exactly what's gated.
+# It plays the game data of the release package (TYRQ00001's USRDIR).
 ifeq ($(DEBUG_BUILD),1)
-    TARGET := $(BASE_TARGET)$(RENDERER_SUFFIX)Debug
+    DEBUG_SUFFIX := Debug
     TITLE  := $(BASE_TITLE) Debug
     APPID  := TYRQDBG01
     CFLAGS += -DTYRQUAKE_DEBUG_BUILD
 else
-    TARGET := $(BASE_TARGET)$(RENDERER_SUFFIX)
+    DEBUG_SUFFIX :=
     TITLE  := $(BASE_TITLE)
     APPID  := $(BASE_APPID)
 endif
 
+TARGET    := $(BASE_TARGET)$(RENDERER_SUFFIX)$(DEBUG_SUFFIX)
+SW_TARGET := $(BASE_TARGET)SW$(DEBUG_SUFFIX)
+
+# This package's own folder: its programs, the log, the launcher's files
+CFLAGS += -DPS3_APP_DIR='"/dev_hdd0/game/$(APPID)/USRDIR"'
+
 CONTENTID := UP0001-$(APPID)_00-0000000000000000
 
 # ppu_rules packs the PKG in $(BUILDDIR)/pkg and never empties it: one per
-# variant, or a mission pack PKG would carry the base game's folders.
+# program, so each has its own.
 BUILDDIR := $(CURDIR)/build/$(TARGET)
 OBJDIR   := $(CURDIR)/obj/$(TARGET)
 
@@ -203,12 +169,19 @@ else
 RENDER_SRCS := $(SW_SRCS) vid_ps3_sw.c
 endif
 
+# the game picker and the renderer switch (1.6.0)
+PS3_SRCS += ps3_launcher.c
+
 vpath %.c $(TQ_SRC)/common $(TQ_SRC)/NQ common common/gl
 
 SRCS := $(COMMON_SRCS) $(NQ_SRCS) $(PS3_SRCS) $(RENDER_SRCS)
 OBJS := $(addprefix $(OBJDIR)/,$(SRCS:.c=.o))
 
+ifeq ($(RENDERER),gl)
 all: $(TARGET).pkg
+else
+all: $(TARGET).self
+endif
 
 $(OBJDIR):
 	@mkdir -p $@
@@ -244,6 +217,18 @@ ifneq ($(PKGFILES),)
 endif
 
 $(TARGET).pkg: | pkgdirs
+
+# The other two programs go straight into the staging folder the %.pkg
+# rule packs: RELOAD.SELF (this build as a plain SELF) and the software
+# renderer, made by a make of its own (its objects in obj/$(SW_TARGET)).
+$(TARGET).pkg: programs
+
+.PHONY: programs
+programs: $(TARGET).self
+	$(MAKE) RENDERER=soft DEBUG_BUILD=$(DEBUG_BUILD) $(SW_TARGET).self
+	mkdir -p $(BUILDDIR)/pkg/USRDIR
+	cp $(TARGET).self $(BUILDDIR)/pkg/USRDIR/RELOAD.SELF
+	cp $(SW_TARGET).self $(BUILDDIR)/pkg/USRDIR/TYRQUAKE_SW.SELF
 
 clean:
 	# Only intermediate build files, every variant's (object files,
