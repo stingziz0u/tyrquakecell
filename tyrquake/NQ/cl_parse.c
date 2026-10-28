@@ -994,20 +994,6 @@ CL_ParseServerMessage(void)
 	}
 
 	SHOWNET(svc_strings[cmd]);
-	{
-	    extern void PS3_Log(const char *fmt, ...);
-	    static int msg_count = 0;
-	    msg_count++;
-	    // Cheap and throttled normally, but every message in the last
-	    // ~200 before a crash matters, so keep a small ring instead of
-	    // just "first N" -- log everything from #1 but only print
-	    // sparingly UNLESS we're near a suspected trouble zone. For now:
-	    // log every message (cmd is cheap to print, not the heavy part
-	    // of previous crashes) -- if this floods too much for the RAM
-	    // icon we can throttle again once we've found the culprit.
-	    PS3_Log("CL_ParseServerMessage: #%d cmd=%d (%s)", msg_count, cmd,
-		    (cmd >= 0 && cmd < 64) ? svc_strings[cmd] : "???");
-	}
 
 	// other commands
 	switch (cmd) {

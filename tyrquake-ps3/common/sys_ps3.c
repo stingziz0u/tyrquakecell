@@ -127,31 +127,62 @@ Sys_MakeCodeUnwriteable(void *start_addr, void *end_addr)
 #define PS3_LOG_PATH     PS3_APP_DIR "/tyrquake_log.txt"
 #define PS3_LOG_OLD_PATH PS3_APP_DIR "/tyrquake_log.old.txt"
 
+/* At most this much a run (1.6.1). Every line is a trip to the HDD: one
+ * written every frame or every network message (as in 1.6.0) keeps the
+ * disk busy and the frame rate down for as long as it goes on. Past the
+ * limit only Sys_Error still writes. */
+#define PS3_LOG_MAX (512 * 1024)
+
+static long ps3_log_written;
+
+static FILE *
+PS3_LogOpen(void)
+{
+    FILE *f;
+
+    if (ps3_log_written >= PS3_LOG_MAX)
+	return NULL;
+
+    f = fopen(PS3_LOG_PATH, "a");
+    if (f && ps3_log_written + 256 >= PS3_LOG_MAX) {
+	fprintf(f, "(log full: nothing more is written this run)\n");
+	fclose(f);
+	ps3_log_written = PS3_LOG_MAX;
+	return NULL;
+    }
+
+    return f;
+}
+
 void
 PS3_Log(const char *fmt, ...)
 {
     va_list argptr;
-    FILE *f = fopen(PS3_LOG_PATH, "a");
+    int n;
+    FILE *f = PS3_LogOpen();
     if (!f)
 	return;
     va_start(argptr, fmt);
-    vfprintf(f, fmt, argptr);
+    n = vfprintf(f, fmt, argptr);
     va_end(argptr);
     fprintf(f, "\n");
     fclose(f);
+    ps3_log_written += (n > 0 ? n : 0) + 1;
 }
 
 void
 Sys_DebugLog(const char *file, const char *fmt, ...)
 {
     va_list argptr;
-    FILE *f = fopen(PS3_LOG_PATH, "a");
+    int n;
+    FILE *f = PS3_LogOpen();
     if (!f)
 	return;
     va_start(argptr, fmt);
-    vfprintf(f, fmt, argptr);
+    n = vfprintf(f, fmt, argptr);
     va_end(argptr);
     fclose(f);
+    ps3_log_written += n > 0 ? n : 0;
 }
 
 void

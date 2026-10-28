@@ -65,13 +65,10 @@ TraceLine(vec3_t start, vec3_t end, vec3_t impact)
 void
 Chase_Update(void)
 {
-    extern void PS3_Log(const char *fmt, ...);
     int i;
     float dist;
     vec3_t forward, up, right;
     vec3_t dest, stop;
-
-    PS3_Log("Chase_Update: entry");
 
     // if can't see player, reset
     AngleVectors(cl.viewangles, forward, right, up);
